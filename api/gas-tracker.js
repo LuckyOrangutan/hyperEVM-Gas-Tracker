@@ -118,22 +118,45 @@ async function scanAllTransactions(address) {
         while (true) {
             console.log(`Fetching transactions: offset=${offset}, limit=${limit}`);
             
-            const response = await fetch(
-                `https://www.hyperscan.com/api/v2/addresses/${address}/transactions?offset=${offset}&limit=${limit}`,
-                {
-                    headers: {
-                        'Accept': 'application/json',
-                        'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
-                    },
-                    timeout: 30000
-                }
-            );
+            // Try different API endpoints
+            const endpoints = [
+                `https://api.hyperscan.xyz/v1/addresses/${address}/transactions?limit=${limit}&offset=${offset}`,
+                `https://www.hyperscan.xyz/api/v1/addresses/${address}/transactions?limit=${limit}&offset=${offset}`,
+                `https://hyperscan.xyz/api/v1/addresses/${address}/transactions?limit=${limit}&offset=${offset}`
+            ];
             
-            if (!response.ok) {
-                throw new Error(`Hyperscan API returned ${response.status}: ${response.statusText}`);
+            let response;
+            let lastError;
+            
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`Trying endpoint: ${endpoint}`);
+                    response = await fetch(endpoint, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        console.log(`Success with endpoint: ${endpoint}`);
+                        break;
+                    }
+                    lastError = `${response.status}: ${response.statusText}`;
+                } catch (e) {
+                    lastError = e.message;
+                    console.log(`Failed with ${endpoint}: ${e.message}`);
+                }
             }
             
+            if (!response || !response.ok) {
+                throw new Error(`All Hyperscan API endpoints failed. Last error: ${lastError}`);
+            }
+            
+            console.log(`Response status: ${response.status}`);
+            
             const data = await response.json();
+            console.log(`Received ${data.items ? data.items.length : 0} transactions`);
             
             if (!data.items || !Array.isArray(data.items)) {
                 console.log('No more transactions found');
