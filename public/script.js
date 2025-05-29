@@ -38,16 +38,32 @@ async function trackGas() {
         });
         
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
-            throw new Error(errorData.error || 'Failed to fetch gas data');
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch (parseError) {
+                console.error('Failed to parse error response:', parseError);
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            
+            console.error('Server error response:', errorData);
+            throw new Error(errorData.error || `Server error ${response.status}: ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('Received data:', data);
         displayResults(address, data);
     } catch (error) {
+        console.error('Frontend error:', error);
+        console.error('Error name:', error.name);
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        
         let errorMessage = error.message;
         if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-            errorMessage = 'Request timed out. Try scanning recent blocks instead of full history.';
+            errorMessage = 'Request timed out. The server is taking too long to respond.';
+        } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+            errorMessage = 'Network error. Please check your connection and try again.';
         }
         showError('Error fetching gas data: ' + errorMessage);
     } finally {
