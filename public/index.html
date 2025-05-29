@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperEVM Gas Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>HyperEVM Gas Tracker</h1>
+        <p>Enter an address to see total HYPE gas burnt</p>
+        
+        <div class="input-section">
+            <input type="text" id="addressInput" placeholder="Enter HyperEVM address (0x...)">
+            <button onclick="trackGas()">Track Gas</button>
+        </div>
+        
+        <div id="loading" class="loading hidden">Loading...</div>
+        
+        <div id="results" class="results hidden">
+            <h2>Gas Usage Results</h2>
+            <div class="result-item">
+                <span class="label">Address:</span>
+                <span id="resultAddress"></span>
+            </div>
+            <div class="result-item">
+                <span class="label">Total HYPE Gas Burnt:</span>
+                <span id="totalGas"></span>
+            </div>
+            <div class="result-item">
+                <span class="label">Number of Transactions:</span>
+                <span id="txCount"></span>
+            </div>
+        </div>
+        
+        <div id="error" class="error hidden"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "hyperevm-gas-tracker",
+  "version": "1.0.0",
+  "description": "Track total HYPE gas burnt for HyperEVM addresses",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "start": "vercel dev"
+  },
+  "keywords": ["hyperevm", "gas", "tracker", "blockchain"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "web3": "^4.2.1"
+  }
+}
