@@ -57,9 +57,9 @@ export default async function handler(req, res) {
                 error: 'Full history scanning is temporarily disabled due to RPC rate limits. Use recent blocks instead.' 
             });
         } else {
-            startBlock = Math.max(0, latestBlock - 5000); // Reduced to 5K blocks
-            batchSize = 10; // Much smaller batches
-            sequentialProcessing = true; // Process sequentially to avoid rate limits
+            startBlock = Math.max(0, latestBlock - 1000); // Further reduced to 1K blocks for speed
+            batchSize = 20; // Larger batches but fewer blocks
+            sequentialProcessing = false; // Use batch processing for speed
         }
         
         if (sequentialProcessing) {
@@ -87,14 +87,15 @@ export default async function handler(req, res) {
             }
             console.log(`Completed processing. Total gas: ${totalGas}, Transaction count: ${transactionCount}`);
         } else {
-            // Legacy batch processing (kept for fallback)
+            // Optimized batch processing
+            console.log(`Starting batch processing from block ${startBlock} to ${latestBlock}`);
             for (let i = startBlock; i <= latestBlock; i += batchSize) {
-                const endBlock = Math.min(i + batchSize - 1, Number(latestBlock));
-                console.log(`Processing blocks ${i} to ${endBlock}`);
+                const endBlock = Math.min(i + batchSize - 1, latestBlock);
+                console.log(`Processing blocks ${i} to ${endBlock} (${((i - startBlock) / (latestBlock - startBlock) * 100).toFixed(1)}% complete)`);
                 
                 const batchPromises = [];
                 for (let blockNum = i; blockNum <= endBlock; blockNum++) {
-                    batchPromises.push(processBlockWithRetry(web3, blockNum, address));
+                    batchPromises.push(processBlockWithRetry(web3, blockNum, address, 2)); // Fewer retries for speed
                 }
                 
                 const batchResults = await Promise.allSettled(batchPromises);
@@ -106,8 +107,8 @@ export default async function handler(req, res) {
                     }
                 }
                 
-                // Add delay between batches
-                await new Promise(resolve => setTimeout(resolve, 200));
+                // Shorter delay between batches
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
         
@@ -119,7 +120,7 @@ export default async function handler(req, res) {
             blocksScanned: latestBlock - startBlock + 1,
             scanType: 'recent',
             latestBlock: latestBlock,
-            note: 'Scanned last 5,000 blocks to avoid rate limits'
+            note: 'Scanned last 1,000 blocks for optimal performance'
         });
         
     } catch (error) {
@@ -171,12 +172,12 @@ export default async function handler(req, res) {
     }
 }
 
-async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetries = 3) {
+async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetries = 2) {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
-            // Add timeout to block requests
+            // Shorter timeout for faster processing
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Block request timeout')), 8000)
+                setTimeout(() => reject(new Error('Block request timeout')), 5000)
             );
             
             const block = await Promise.race([
@@ -196,7 +197,7 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
                     // Get transaction receipt to get actual gas used
                     try {
                         const receiptPromise = new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Receipt request timeout')), 4000)
+                            setTimeout(() => reject(new Error('Receipt request timeout')), 3000)
                         );
                         
                         const receipt = await Promise.race([
@@ -224,8 +225,8 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
             
             // Check if it's a rate limit error (HTML response)
             if (error.message.includes('Unexpected token') && error.message.includes('<html>')) {
-                console.log(`Rate limit detected for block ${blockNumber}, retrying in ${attempt * 500}ms...`);
-                await new Promise(resolve => setTimeout(resolve, attempt * 500)); // Exponential backoff
+                console.log(`Rate limit detected for block ${blockNumber}, retrying in ${attempt * 200}ms...`);
+                await new Promise(resolve => setTimeout(resolve, attempt * 200)); // Faster backoff
                 continue;
             }
             
@@ -234,8 +235,8 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
                 return { gas: 0, count: 0 };
             }
             
-            // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, attempt * 200));
+            // Shorter wait before retry
+            await new Promise(resolve => setTimeout(resolve, attempt * 100));
         }
     }
     

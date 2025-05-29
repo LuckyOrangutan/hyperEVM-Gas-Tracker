@@ -24,7 +24,7 @@ async function trackGas() {
     const fullHistory = scanType === 'full';
     
     // Show loading with appropriate message
-    const loadingMessage = 'Scanning recent 5,000 blocks... This may take 30-60 seconds.';
+    const loadingMessage = 'Scanning recent 1,000 blocks... This should take 10-30 seconds.';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     
