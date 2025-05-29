@@ -18,15 +18,23 @@
                     <input type="radio" name="scanType" value="recent" checked>
                     <span>Recent (1K blocks) - Fast & Reliable</span>
                 </label>
-                <label class="radio-option disabled">
-                    <input type="radio" name="scanType" value="full" disabled>
-                    <span>Full History (Temporarily disabled due to rate limits)</span>
+                <label class="radio-option">
+                    <input type="radio" name="scanType" value="lifetime">
+                    <span>Lifetime Total - Complete History</span>
                 </label>
             </div>
             <button onclick="trackGas()">Track Gas</button>
         </div>
         
         <div id="loading" class="loading hidden">Loading...</div>
+        
+        <div id="progress" class="progress hidden">
+            <div class="progress-bar">
+                <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <div id="progressText" class="progress-text">0% complete</div>
+            <div id="progressDetails" class="progress-details"></div>
+        </div>
         
         <div id="results" class="results hidden">
             <h2>Gas Usage Results</h2>

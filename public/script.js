@@ -1,12 +1,14 @@
 async function trackGas() {
     const address = document.getElementById('addressInput').value.trim();
     const loadingDiv = document.getElementById('loading');
+    const progressDiv = document.getElementById('progress');
     const resultsDiv = document.getElementById('results');
     const errorDiv = document.getElementById('error');
     
     // Hide previous results
     resultsDiv.classList.add('hidden');
     errorDiv.classList.add('hidden');
+    progressDiv.classList.add('hidden');
     
     // Validate address
     if (!address) {
@@ -21,9 +23,17 @@ async function trackGas() {
     
     // Get scan type
     const scanType = document.querySelector('input[name="scanType"]:checked').value;
-    const fullHistory = scanType === 'full';
     
-    // Show loading with appropriate message
+    if (scanType === 'lifetime') {
+        await performLifetimeScan(address);
+    } else {
+        await performRecentScan(address);
+    }
+}
+
+async function performRecentScan(address) {
+    const loadingDiv = document.getElementById('loading');
+    
     const loadingMessage = 'Scanning recent 1,000 blocks... This should take 10-30 seconds.';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
@@ -34,7 +44,7 @@ async function trackGas() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ address, fullHistory })
+            body: JSON.stringify({ address, fullHistory: false })
         });
         
         if (!response.ok) {
@@ -54,21 +64,107 @@ async function trackGas() {
         console.log('Received data:', data);
         displayResults(address, data);
     } catch (error) {
-        console.error('Frontend error:', error);
-        console.error('Error name:', error.name);
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
-        
-        let errorMessage = error.message;
-        if (error.message.includes('timeout') || error.message.includes('Timeout')) {
-            errorMessage = 'Request timed out. The server is taking too long to respond.';
-        } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-            errorMessage = 'Network error. Please check your connection and try again.';
-        }
-        showError('Error fetching gas data: ' + errorMessage);
+        handleError(error);
     } finally {
         loadingDiv.classList.add('hidden');
     }
+}
+
+async function performLifetimeScan(address) {
+    const loadingDiv = document.getElementById('loading');
+    const progressDiv = document.getElementById('progress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const progressDetails = document.getElementById('progressDetails');
+    
+    loadingDiv.textContent = 'Starting lifetime scan... This will scan the entire HyperEVM history.';
+    loadingDiv.classList.remove('hidden');
+    progressDiv.classList.remove('hidden');
+    
+    let chunk = 0;
+    let totalGas = 0;
+    let totalTransactions = 0;
+    let totalBlocksScanned = 0;
+    
+    try {
+        while (true) {
+            console.log(`Processing chunk ${chunk}...`);
+            
+            const response = await fetch('/api/lifetime-scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ address, chunk })
+            });
+            
+            if (!response.ok) {
+                let errorData;
+                try {
+                    errorData = await response.json();
+                } catch (parseError) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                }
+                throw new Error(errorData.error || `Server error ${response.status}: ${response.statusText}`);
+            }
+            
+            const chunkData = await response.json();
+            console.log(`Chunk ${chunk} data:`, chunkData);
+            
+            // Accumulate results
+            totalGas += parseInt(chunkData.totalGas || '0');
+            totalTransactions += chunkData.transactionCount || 0;
+            totalBlocksScanned += chunkData.blocksScanned || 0;
+            
+            // Update progress
+            const progress = chunkData.progress || 0;
+            progressFill.style.width = `${progress}%`;
+            progressText.textContent = `${progress}% complete`;
+            progressDetails.textContent = `Chunk ${chunk + 1} - Found ${formatNumber(totalTransactions)} transactions, ${formatNumber(totalGas)} total gas`;
+            
+            if (chunkData.isComplete) {
+                console.log('Lifetime scan complete!');
+                break;
+            }
+            
+            chunk = chunkData.nextChunk || (chunk + 1);
+            
+            // Small delay between chunks
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        // Display final results
+        const finalData = {
+            totalGas: totalGas.toString(),
+            transactionCount: totalTransactions,
+            blocksScanned: totalBlocksScanned,
+            scanType: 'lifetime',
+            note: 'Complete lifetime scan across all HyperEVM blocks'
+        };
+        
+        displayResults(address, finalData);
+        
+    } catch (error) {
+        handleError(error);
+    } finally {
+        loadingDiv.classList.add('hidden');
+        progressDiv.classList.add('hidden');
+    }
+}
+
+function handleError(error) {
+    console.error('Frontend error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    let errorMessage = error.message;
+    if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+        errorMessage = 'Request timed out. The server is taking too long to respond.';
+    } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+    }
+    showError('Error fetching gas data: ' + errorMessage);
 }
 
 function isValidAddress(address) {
