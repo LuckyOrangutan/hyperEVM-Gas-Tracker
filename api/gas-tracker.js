@@ -39,24 +39,36 @@ export default async function handler(req, res) {
         
         console.log(`Starting lifetime gas tracking for address: ${address}`);
         
-        // Try the Blockscout API - the only method that gives complete lifetime data
+        // Use the ultra-efficient method: get total gas from address counters
         try {
-            console.log('Fetching complete transaction history via Blockscout API...');
-            const apiResult = await tryBlockscoutAPI(address);
-            if (apiResult) {
+            console.log('Fetching lifetime gas data via address counters (ultra-efficient method)...');
+            const result = await getLifetimeGasFromCounters(address);
+            if (result) {
                 console.log('Successfully retrieved complete lifetime gas data');
-                return res.json(apiResult);
+                return res.json(result);
             }
         } catch (apiError) {
-            console.log('Blockscout API failed:', apiError.message);
+            console.log('Counters API failed, trying transaction pagination method...', apiError.message);
             
-            // Return a clear error - we can't provide incomplete data
-            return res.status(503).json({
-                error: 'Unable to retrieve complete lifetime gas data. The Blockscout API is currently unavailable.',
-                details: 'This tracker only provides complete lifetime totals. Partial data from recent blocks would be misleading.',
-                suggestion: 'Please try again in a few minutes when the API service recovers.',
-                apiError: apiError.message
-            });
+            // Fallback to the old pagination method
+            try {
+                const apiResult = await tryBlockscoutAPI(address);
+                if (apiResult) {
+                    console.log('Successfully retrieved lifetime gas data via pagination fallback');
+                    return res.json(apiResult);
+                }
+            } catch (paginationError) {
+                console.log('Both methods failed:', paginationError.message);
+                
+                // Return a clear error - we can't provide incomplete data
+                return res.status(503).json({
+                    error: 'Unable to retrieve complete lifetime gas data. Both API methods are currently unavailable.',
+                    details: 'This tracker only provides complete lifetime totals. Partial data would be misleading.',
+                    suggestion: 'Please try again in a few minutes when the API service recovers.',
+                    primaryError: apiError.message,
+                    fallbackError: paginationError.message
+                });
+            }
         }
         
     } catch (error) {
@@ -106,6 +118,71 @@ export default async function handler(req, res) {
             details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
+}
+
+async function getLifetimeGasFromCounters(address) {
+    console.log('Fetching address counters...');
+    
+    // Get address counters (gas usage total)
+    const countersResponse = await fetch(`https://www.hyperscan.com/api/v2/addresses/${address}/counters`, {
+        headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
+        },
+        timeout: 10000
+    });
+    
+    if (!countersResponse.ok) {
+        throw new Error(`Counters API returned ${countersResponse.status}: ${countersResponse.statusText}`);
+    }
+    
+    const countersData = await countersResponse.json();
+    console.log('Counters data:', countersData);
+    
+    if (!countersData.gas_usage_count) {
+        throw new Error('No gas usage data found in counters');
+    }
+    
+    // Get current network gas price stats
+    console.log('Fetching network gas price stats...');
+    const statsResponse = await fetch('https://www.hyperscan.com/api/v2/stats', {
+        headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
+        },
+        timeout: 10000
+    });
+    
+    if (!statsResponse.ok) {
+        throw new Error(`Stats API returned ${statsResponse.status}: ${statsResponse.statusText}`);
+    }
+    
+    const statsData = await statsResponse.json();
+    console.log('Network stats:', statsData);
+    
+    // Extract data
+    const totalGasUsed = parseInt(countersData.gas_usage_count);
+    const transactionCount = parseInt(countersData.transactions_count || '0');
+    const averageGasPrice = parseFloat(statsData.average_gas_price || '25'); // Default 25 gwei if not available
+    
+    // Calculate total gas cost
+    // gas_used (units) × average_gas_price (gwei) = cost in gwei
+    // gwei ÷ 10^9 = ETH/HYPE
+    const gasCostGwei = totalGasUsed * averageGasPrice;
+    const gasCostHype = gasCostGwei / Math.pow(10, 9);
+    
+    console.log(`Calculated: ${totalGasUsed} gas units × ${averageGasPrice} gwei = ${gasCostHype} HYPE`);
+    
+    return {
+        totalGas: gasCostHype.toFixed(6),
+        transactionCount: transactionCount,
+        scanType: 'ultra-efficient',
+        method: 'Address Counters + Network Stats',
+        note: `Ultra-fast lookup: ${totalGasUsed.toLocaleString()} gas units × ${averageGasPrice} gwei (network average) = ${gasCostHype.toFixed(6)} HYPE`,
+        gasUnitsUsed: totalGasUsed,
+        averageGasPrice: averageGasPrice,
+        calculationMethod: 'total_gas_units × average_network_gas_price ÷ 10^9'
+    };
 }
 
 async function tryBlockscoutAPI(address) {

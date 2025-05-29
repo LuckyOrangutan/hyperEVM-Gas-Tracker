@@ -28,7 +28,7 @@ async function trackGas() {
 async function performSmartGasTracking(address) {
     const loadingDiv = document.getElementById('loading');
     
-    const loadingMessage = 'Scanning complete transaction history for lifetime gas total...';
+    const loadingMessage = 'Fetching lifetime gas total (ultra-fast method)...';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     
