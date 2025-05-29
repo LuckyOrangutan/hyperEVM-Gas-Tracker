@@ -26,6 +26,8 @@ async function trackGas() {
     
     if (scanType === 'lifetime') {
         await performLifetimeScan(address);
+    } else if (scanType === 'efficient') {
+        await performEfficientScan(address);
     } else {
         await performRecentScan(address);
     }
@@ -149,6 +151,45 @@ async function performLifetimeScan(address) {
     } finally {
         loadingDiv.classList.add('hidden');
         progressDiv.classList.add('hidden');
+    }
+}
+
+async function performEfficientScan(address) {
+    const loadingDiv = document.getElementById('loading');
+    
+    const loadingMessage = 'Scanning all transactions using Blockscout API... This should take 5-15 seconds.';
+    loadingDiv.textContent = loadingMessage;
+    loadingDiv.classList.remove('hidden');
+    
+    try {
+        const response = await fetch('/api/efficient-scan', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ address })
+        });
+        
+        if (!response.ok) {
+            let errorData;
+            try {
+                errorData = await response.json();
+            } catch (parseError) {
+                console.error('Failed to parse error response:', parseError);
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            
+            console.error('Server error response:', errorData);
+            throw new Error(errorData.error || `Server error ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Received efficient scan data:', data);
+        displayResults(address, data);
+    } catch (error) {
+        handleError(error);
+    } finally {
+        loadingDiv.classList.add('hidden');
     }
 }
 

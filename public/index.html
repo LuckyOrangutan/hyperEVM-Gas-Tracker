@@ -15,12 +15,16 @@
             <input type="text" id="addressInput" placeholder="Enter HyperEVM address (0x...)">
             <div class="scan-options">
                 <label class="radio-option">
-                    <input type="radio" name="scanType" value="recent" checked>
-                    <span>Recent (1K blocks) - Fast & Reliable</span>
+                    <input type="radio" name="scanType" value="recent">
+                    <span>Recent (1K blocks) - Block Scanning</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="scanType" value="efficient" checked>
+                    <span>Lifetime Total - Efficient ⚡</span>
                 </label>
                 <label class="radio-option">
                     <input type="radio" name="scanType" value="lifetime">
-                    <span>Lifetime Total - Complete History</span>
+                    <span>Lifetime Total - Chunked (Legacy)</span>
                 </label>
             </div>
             <button onclick="trackGas()">Track Gas</button>
