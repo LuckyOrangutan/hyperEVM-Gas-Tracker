@@ -263,55 +263,86 @@ async function tryBlockscoutAPI(address) {
     let totalGas = 0;
     let page = 1;
     const limit = 50;
+    let retryCount = 0;
+    const maxRetries = 3;
     
-    // Try up to 10 pages for fallback
-    while (page <= 10) {
+    // Try up to 20 pages for comprehensive scan when API is working
+    while (page <= 20) {
         console.log(`Fetching Blockscout page ${page}...`);
         
         const url = `https://www.hyperscan.com/api/v2/addresses/${address}/transactions?page=${page}&limit=${limit}`;
         
-        const response = await fetch(url, {
-            headers: {
-                'Accept': 'application/json',
-                'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
-            },
-            timeout: 8000
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Blockscout API returned ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        
-        if (!data.items || data.items.length === 0) {
-            break;
-        }
-        
-        // Process transactions from this page
-        for (const tx of data.items) {
-            if (tx.from && tx.from.hash && tx.from.hash.toLowerCase() === address.toLowerCase()) {
-                const gasUsed = parseInt(tx.gas_used || '0');
-                const gasPrice = parseInt(tx.gas_price || '0');
-                const gasCostWei = gasUsed * gasPrice;
-                const gasCostHype = gasCostWei / Math.pow(10, 18);
-                
-                totalGas += gasCostHype;
-                allTransactions.push({
-                    hash: tx.hash,
-                    gasUsed: gasUsed,
-                    gasPrice: gasPrice,
-                    gasCostHype: gasCostHype
-                });
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Accept': 'application/json',
+                    'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
+                },
+                timeout: 10000
+            });
+            
+            if (!response.ok) {
+                // If it's a server error and we haven't reached max retries for this page
+                if (response.status >= 500 && retryCount < maxRetries) {
+                    console.log(`Server error on page ${page}, retrying... (${retryCount + 1}/${maxRetries})`);
+                    retryCount++;
+                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
+                    continue;
+                }
+                throw new Error(`Blockscout API returned ${response.status}: ${response.statusText}`);
             }
-        }
-        
-        if (data.items.length < limit) {
+            
+            const data = await response.json();
+            
+            if (!data.items || data.items.length === 0) {
+                console.log('No more transactions found');
+                break;
+            }
+            
+            // Process transactions from this page
+            for (const tx of data.items) {
+                if (tx.from && tx.from.hash && tx.from.hash.toLowerCase() === address.toLowerCase()) {
+                    const gasUsed = parseInt(tx.gas_used || '0');
+                    const gasPrice = parseInt(tx.gas_price || '0');
+                    const gasCostWei = gasUsed * gasPrice;
+                    const gasCostHype = gasCostWei / Math.pow(10, 18);
+                    
+                    totalGas += gasCostHype;
+                    allTransactions.push({
+                        hash: tx.hash,
+                        gasUsed: gasUsed,
+                        gasPrice: gasPrice,
+                        gasCostHype: gasCostHype
+                    });
+                }
+            }
+            
+            if (data.items.length < limit) {
+                console.log('Reached end of transactions (partial page)');
+                break;
+            }
+            
+            page++;
+            retryCount = 0; // Reset retry count for next page
+            await new Promise(resolve => setTimeout(resolve, 100)); // Short delay between pages
+            
+        } catch (fetchError) {
+            if (retryCount < maxRetries) {
+                console.log(`Error fetching page ${page}, retrying... (${retryCount + 1}/${maxRetries}):`, fetchError.message);
+                retryCount++;
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+                continue;
+            }
+            
+            // If it's the first page, this is a critical error
+            if (page === 1) {
+                throw new Error(`Failed to fetch transaction data: ${fetchError.message}`);
+            }
+            
+            // For subsequent pages, we can continue with what we have
+            console.log(`Stopping pagination due to error on page ${page}:`, fetchError.message);
             break;
         }
-        
-        page++;
-        await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     return {
@@ -319,7 +350,7 @@ async function tryBlockscoutAPI(address) {
         transactionCount: allTransactions.length,
         scanType: 'efficient',
         method: 'Blockscout API',
-        note: `Scanned all transactions directly via Blockscout API. Gas cost = gas_used × gas_price converted from wei to HYPE.`,
+        note: `Scanned ${page - 1} pages of transactions via Blockscout API. Gas cost = gas_used × gas_price converted from wei to HYPE.`,
         pagesScanned: page - 1
     };
 }

@@ -1,19 +1,35 @@
 # HyperEVM Gas Tracker
 
-A web application to track total HYPE gas burnt for any HyperEVM address.
+A smart web application to track total HYPE gas burnt for any HyperEVM address with automatic fallback systems.
 
 ## Features
 
-- 🔍 Enter any HyperEVM address to see gas usage
-- 📊 View total HYPE gas burnt and transaction count
-- 🎨 Clean, responsive UI
-- ⚡ Serverless deployment on Vercel
+- 🚀 **Smart Dual-Method Scanning**: Tries efficient API first, falls back to RPC scanning
+- ⚡ **Lightning Fast**: 5-15 seconds for complete lifetime gas history
+- 💰 **Accurate Gas Costs**: Real HYPE amounts (gas_used × gas_price ÷ 10^18)
+- 🔄 **Automatic Retry Logic**: Handles API failures gracefully with exponential backoff
+- 🎯 **Single-Click Operation**: One button does everything intelligently
+- 📱 **Responsive UI**: Clean interface that works on all devices
 
 ## Usage
 
 1. Visit the deployed app
 2. Enter a valid HyperEVM address (starts with 0x)
-3. Click "Track Gas" to see results
+3. Click "Track Lifetime Gas ⚡"
+4. Get complete gas usage history automatically
+
+## How It Works
+
+### Smart Fallback System:
+1. **Primary**: Blockscout API (hyperscan.com) - scans all transactions instantly
+2. **Fallback**: RPC block scanning - scans recent 1,000 blocks if API fails
+3. **Auto-retry**: 3 attempts per API request with exponential backoff
+
+### Gas Calculation:
+- Fetches all transactions where address is sender
+- Calculates: `gas_used × gas_price` for each transaction
+- Converts wei to HYPE: `total_wei ÷ 10^18`
+- Returns real HYPE cost, not inflated gas units
 
 ## Local Development
 
@@ -26,18 +42,22 @@ Open http://localhost:3000 to view the app.
 
 ## Deployment
 
-This app is designed for Vercel deployment:
+Optimized for Vercel serverless deployment:
 
 ```bash
 vercel
 ```
 
-## How it Works
+## API Endpoints
 
-The app scans the last 10,000 blocks on the HyperEVM mainnet (Chain ID: 999) to find transactions sent from the specified address, then calculates the total gas used across all those transactions.
+- `/api/gas-tracker` - Smart gas tracking with automatic fallback
+- `/api/efficient-scan` - Direct Blockscout API scanning
+- `/api/lifetime-scan` - Legacy chunked block scanning
 
 ## Tech Stack
 
-- Frontend: Vanilla HTML/CSS/JavaScript
-- Backend: Vercel serverless functions
-- Blockchain: Web3.js connecting to HyperEVM mainnet (rpc.hyperliquid.xyz/evm)
+- **Frontend**: Vanilla HTML/CSS/JavaScript
+- **Backend**: Vercel serverless functions  
+- **Primary API**: Blockscout (hyperscan.com)
+- **Fallback**: Web3.js + HyperEVM RPC (rpc.hyperliquid.xyz/evm)
+- **Network**: HyperEVM Mainnet (Chain ID: 999)
