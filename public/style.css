@@ -9,16 +9,19 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     padding: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .container {
     max-width: 600px;
+    width: 100%;
     margin: 0 auto;
     background: white;
     border-radius: 15px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
     padding: 40px;
-    margin-top: 50px;
 }
 
 h1 {
@@ -40,6 +43,7 @@ p {
     flex-direction: column;
     gap: 15px;
     margin-bottom: 30px;
+    width: 100%;
 }
 
 #addressInput {
@@ -65,13 +69,20 @@ button {
     cursor: pointer;
     font-size: 16px;
     font-weight: bold;
-    transition: transform 0.2s;
+    transition: all 0.3s ease;
     align-self: center;
     min-width: 150px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
 }
 
 button:hover {
     transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
 }
 
 .loading {
@@ -204,19 +215,125 @@ button:hover {
     border-radius: 8px;
     margin-top: 20px;
     border-left: 4px solid #d32f2f;
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .hidden {
     display: none;
 }
 
-@media (max-width: 600px) {
+/* Large screens - desktop */
+@media (min-width: 1200px) {
     .container {
-        margin: 20px;
-        padding: 20px;
+        max-width: 700px;
+        padding: 50px;
     }
     
     h1 {
+        font-size: 3em;
+    }
+    
+    .gas-amount {
+        font-size: 3.5em;
+    }
+}
+
+/* Tablet and smaller laptops */
+@media (max-width: 768px) {
+    .container {
+        margin: 20px;
+        padding: 30px;
+    }
+    
+    h1 {
+        font-size: 2.2em;
+    }
+    
+    .gas-amount {
+        font-size: 2.5em;
+    }
+}
+
+/* Mobile devices */
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        margin: 10px;
+        padding: 20px;
+        border-radius: 10px;
+    }
+    
+    h1 {
+        font-size: 1.8em;
+        margin-bottom: 8px;
+    }
+    
+    p {
+        font-size: 1em;
+        margin-bottom: 20px;
+    }
+    
+    #addressInput {
+        padding: 12px;
+        font-size: 14px;
+    }
+    
+    button {
+        padding: 12px 20px;
+        font-size: 14px;
+        width: 100%;
+    }
+    
+    .gas-amount {
         font-size: 2em;
+    }
+    
+    .gas-burnt-header h2 {
+        font-size: 1.5em;
+    }
+    
+    .detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        padding: 10px 0;
+    }
+    
+    .detail-value {
+        font-size: 0.9em;
+        word-break: break-all;
+    }
+    
+    .calculation-formula {
+        font-size: 0.8em;
+    }
+}
+
+/* Very small devices */
+@media (max-width: 320px) {
+    .container {
+        padding: 15px;
+    }
+    
+    h1 {
+        font-size: 1.5em;
+    }
+    
+    .gas-amount {
+        font-size: 1.8em;
     }
 }
