@@ -115,16 +115,15 @@ async function scanAllTransactions(address) {
     const limit = 100; // Try smaller limit
     
     try {
-        // Let's try the most likely API endpoints for Hyperscan
+        // Hyperscan uses Blockscout API format
         while (true) {
             const endpoints = [
-                // Try various possible Hyperscan API patterns
-                `https://api.hyperscan.xyz/accounts/${address}/transactions?page=${page}&limit=${limit}`,
-                `https://hyperscan.xyz/api/v1/accounts/${address}/transactions?page=${page}&limit=${limit}`,
-                `https://api.hyperscan.io/v1/address/${address}/txs?page=${page}&limit=${limit}`,
-                // Common blockchain explorer API patterns
-                `https://hyperscan.xyz/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}`,
-                `https://api.hyperscan.xyz/v1/txs?address=${address}&page=${page}&limit=${limit}`
+                // Primary endpoint - Blockscout format for Hyperscan
+                `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}&sort=desc`,
+                // Alternative without www
+                `https://hyperscan.com/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}&sort=desc`,
+                // Try with different parameters
+                `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&startblock=0&endblock=999999999&page=${page}&offset=${limit}`
             ];
             
             let response;
@@ -168,14 +167,25 @@ async function scanAllTransactions(address) {
             for (const tx of transactions) {
                 // Check various possible field names for the sender
                 const from = tx.from || tx.from_address || tx.sender;
-                const fee = tx.fee || tx.txfee || tx.gasUsed || tx.gas_fee;
                 
-                if (from && from.toLowerCase() === address.toLowerCase() && fee) {
-                    const feeHype = typeof fee === 'string' ? parseFloat(fee) : fee;
+                // Calculate fee from gasUsed * gasPrice (Blockscout format)
+                let feeInWei = 0;
+                if (tx.gasUsed && tx.gasPrice) {
+                    feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                } else if (tx.fee) {
+                    // Direct fee field if available
+                    feeInWei = BigInt(tx.fee);
+                } else if (tx.txreceipt_status === '1' && tx.gasUsed && tx.gasPrice) {
+                    // Blockscout format
+                    feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                }
+                
+                if (from && from.toLowerCase() === address.toLowerCase() && feeInWei > 0) {
+                    const feeHype = Number(feeInWei) / Math.pow(10, 18);
                     totalGasFeesHype += feeHype;
                     transactionCount++;
                     
-                    console.log(`TX: fee=${feeHype} HYPE`);
+                    console.log(`TX ${tx.hash}: fee=${feeHype} HYPE`);
                 }
             }
             
