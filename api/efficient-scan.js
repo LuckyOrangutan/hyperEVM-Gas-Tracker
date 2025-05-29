@@ -68,10 +68,21 @@ export default async function handler(req, res) {
                     // Only count transactions where this address is the sender (from)
                     if (tx.from && tx.from.hash && tx.from.hash.toLowerCase() === address.toLowerCase()) {
                         const gasUsed = parseInt(tx.gas_used || '0');
-                        totalGas += gasUsed;
+                        const gasPrice = parseInt(tx.gas_price || '0');
+                        
+                        // Calculate actual gas cost: gas_used * gas_price (in wei)
+                        const gasCostWei = gasUsed * gasPrice;
+                        
+                        // Convert from wei to HYPE (1 HYPE = 10^18 wei)
+                        const gasCostHype = gasCostWei / Math.pow(10, 18);
+                        
+                        totalGas += gasCostHype;
                         allTransactions.push({
                             hash: tx.hash,
                             gasUsed: gasUsed,
+                            gasPrice: gasPrice,
+                            gasCostWei: gasCostWei,
+                            gasCostHype: gasCostHype,
                             timestamp: tx.timestamp,
                             value: tx.value,
                             to: tx.to?.hash,
@@ -111,19 +122,21 @@ export default async function handler(req, res) {
             }
         }
         
-        console.log(`Efficient scan complete! Found ${allTransactions.length} transactions with total gas: ${totalGas}`);
+        console.log(`Efficient scan complete! Found ${allTransactions.length} transactions with total gas cost: ${totalGas} HYPE`);
         
         res.json({
-            totalGas: totalGas.toString(),
+            totalGas: totalGas.toFixed(6), // Round to 6 decimal places for readability
             transactionCount: allTransactions.length,
             scanType: 'efficient',
             method: 'Blockscout API',
-            note: `Scanned all transactions directly via Blockscout API - much faster than block scanning!`,
+            note: `Scanned all transactions directly via Blockscout API. Gas cost = gas_used × gas_price converted from wei to HYPE.`,
             pagesScanned: page - 1,
             // Include some recent transaction details for verification
             recentTransactions: allTransactions.slice(0, 5).map(tx => ({
                 hash: tx.hash,
                 gasUsed: tx.gasUsed,
+                gasPrice: tx.gasPrice,
+                gasCostHype: tx.gasCostHype.toFixed(6),
                 timestamp: tx.timestamp,
                 method: tx.method
             }))

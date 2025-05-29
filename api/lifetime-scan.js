@@ -100,7 +100,7 @@ export default async function handler(req, res) {
         console.log(`Chunk ${chunk} complete. Gas: ${totalGas}, Transactions: ${transactionCount}, Progress: ${progress.toFixed(1)}%`);
         
         res.json({
-            totalGas: totalGas.toString(),
+            totalGas: totalGas.toFixed(6),
             transactionCount,
             blocksScanned,
             chunkNumber: chunk,
@@ -170,7 +170,13 @@ async function processBlockOptimized(web3, blockNumber, targetAddress) {
                     
                     if (receipt && receipt.gasUsed) {
                         const gasUsed = typeof receipt.gasUsed === 'bigint' ? Number(receipt.gasUsed) : receipt.gasUsed;
-                        totalGas += gasUsed;
+                        const gasPrice = typeof tx.gasPrice === 'bigint' ? Number(tx.gasPrice) : (tx.gasPrice || 0);
+                        
+                        // Calculate actual gas cost in wei, then convert to HYPE
+                        const gasCostWei = gasUsed * gasPrice;
+                        const gasCostHype = gasCostWei / Math.pow(10, 18);
+                        
+                        totalGas += gasCostHype;
                         count++;
                     }
                 } catch (receiptError) {

@@ -115,12 +115,12 @@ export default async function handler(req, res) {
         console.log(`Total gas found: ${totalGas}, Transaction count: ${transactionCount}`);
         
         res.json({
-            totalGas: totalGas.toString(),
+            totalGas: totalGas.toFixed(6),
             transactionCount,
             blocksScanned: latestBlock - startBlock + 1,
             scanType: 'recent',
             latestBlock: latestBlock,
-            note: 'Scanned last 1,000 blocks for optimal performance'
+            note: 'Scanned last 1,000 blocks. Gas cost = gas_used × gas_price converted from wei to HYPE.'
         });
         
     } catch (error) {
@@ -208,7 +208,15 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
                         if (receipt && receipt.gasUsed) {
                             // Convert BigInt to Number for gas calculation
                             const gasUsed = typeof receipt.gasUsed === 'bigint' ? Number(receipt.gasUsed) : receipt.gasUsed;
-                            totalGas += gasUsed;
+                            
+                            // Get gas price from transaction
+                            const gasPrice = typeof tx.gasPrice === 'bigint' ? Number(tx.gasPrice) : (tx.gasPrice || 0);
+                            
+                            // Calculate actual gas cost in wei, then convert to HYPE
+                            const gasCostWei = gasUsed * gasPrice;
+                            const gasCostHype = gasCostWei / Math.pow(10, 18);
+                            
+                            totalGas += gasCostHype;
                             count++;
                         }
                     } catch (receiptError) {
