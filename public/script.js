@@ -90,8 +90,6 @@ function displayResults(address, data) {
     // Detail rows
     document.getElementById('resultAddress').textContent = address;
     document.getElementById('txCount').textContent = formatNumber(data.transactionCount);
-    document.getElementById('gasUnits').textContent = data.gasUnitsUsed;
-    document.getElementById('gasPrice').textContent = data.averageGasPrice;
     
     // Calculation explanation
     document.getElementById('calculation').textContent = data.calculation;
