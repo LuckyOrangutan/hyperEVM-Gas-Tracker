@@ -24,7 +24,7 @@ async function trackGas() {
     const fullHistory = scanType === 'full';
     
     // Show loading with appropriate message
-    const loadingMessage = fullHistory ? 'Scanning entire HyperEVM history... This may take up to 60 seconds.' : 'Scanning recent blocks...';
+    const loadingMessage = 'Scanning recent 5,000 blocks... This may take 30-60 seconds.';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     

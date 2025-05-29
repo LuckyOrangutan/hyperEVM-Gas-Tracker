@@ -71,6 +71,19 @@ p {
     color: #555;
 }
 
+.radio-option.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.radio-option.disabled:hover {
+    background-color: transparent;
+}
+
+.radio-option.disabled span {
+    color: #999;
+}
+
 #addressInput {
     width: 100%;
     padding: 15px;

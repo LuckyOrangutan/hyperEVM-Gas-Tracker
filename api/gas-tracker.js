@@ -34,32 +34,58 @@ export default async function handler(req, res) {
         let totalGas = 0;
         let transactionCount = 0;
         
-        // Determine scan range
-        let startBlock, batchSize;
+        // Determine scan range - disable full history due to rate limiting
+        let startBlock, batchSize, sequentialProcessing;
         if (fullHistory) {
-            startBlock = 0; // Scan from genesis
-            batchSize = 50; // Smaller batches for full history
+            // Full history scanning disabled due to RPC rate limits
+            return res.status(400).json({ 
+                error: 'Full history scanning is temporarily disabled due to RPC rate limits. Use recent blocks instead.' 
+            });
         } else {
-            startBlock = Math.max(0, Number(latestBlock) - 10000);
-            batchSize = 100;
+            startBlock = Math.max(0, Number(latestBlock) - 5000); // Reduced to 5K blocks
+            batchSize = 10; // Much smaller batches
+            sequentialProcessing = true; // Process sequentially to avoid rate limits
         }
         
-        for (let i = startBlock; i <= latestBlock; i += batchSize) {
-            const endBlock = Math.min(i + batchSize - 1, Number(latestBlock));
-            console.log(`Processing blocks ${i} to ${endBlock}`);
-            
-            const batchPromises = [];
-            for (let blockNum = i; blockNum <= endBlock; blockNum++) {
-                batchPromises.push(processBlock(web3, blockNum, address));
-            }
-            
-            const batchResults = await Promise.allSettled(batchPromises);
-            
-            for (const result of batchResults) {
-                if (result.status === 'fulfilled') {
-                    totalGas += result.value.gas;
-                    transactionCount += result.value.count;
+        if (sequentialProcessing) {
+            // Process blocks one by one with delays
+            for (let blockNum = startBlock; blockNum <= latestBlock; blockNum++) {
+                try {
+                    const result = await processBlockWithRetry(web3, blockNum, address);
+                    totalGas += result.gas;
+                    transactionCount += result.count;
+                    
+                    // Add delay between requests to avoid rate limiting
+                    if (blockNum % 10 === 0) {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay every 10 blocks
+                    }
+                } catch (error) {
+                    console.error(`Failed to process block ${blockNum} after retries:`, error.message);
+                    // Continue processing other blocks
                 }
+            }
+        } else {
+            // Legacy batch processing (kept for fallback)
+            for (let i = startBlock; i <= latestBlock; i += batchSize) {
+                const endBlock = Math.min(i + batchSize - 1, Number(latestBlock));
+                console.log(`Processing blocks ${i} to ${endBlock}`);
+                
+                const batchPromises = [];
+                for (let blockNum = i; blockNum <= endBlock; blockNum++) {
+                    batchPromises.push(processBlockWithRetry(web3, blockNum, address));
+                }
+                
+                const batchResults = await Promise.allSettled(batchPromises);
+                
+                for (const result of batchResults) {
+                    if (result.status === 'fulfilled') {
+                        totalGas += result.value.gas;
+                        transactionCount += result.value.count;
+                    }
+                }
+                
+                // Add delay between batches
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
         }
         
@@ -69,8 +95,9 @@ export default async function handler(req, res) {
             totalGas: totalGas.toString(),
             transactionCount,
             blocksScanned: Number(latestBlock) - startBlock + 1,
-            scanType: fullHistory ? 'full' : 'recent',
-            latestBlock: Number(latestBlock)
+            scanType: 'recent',
+            latestBlock: Number(latestBlock),
+            note: 'Scanned last 5,000 blocks to avoid rate limits'
         });
         
     } catch (error) {
@@ -95,54 +122,73 @@ export default async function handler(req, res) {
     }
 }
 
-async function processBlock(web3, blockNumber, targetAddress) {
-    try {
-        // Add timeout to block requests
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Block request timeout')), 10000)
-        );
-        
-        const block = await Promise.race([
-            web3.eth.getBlock(blockNumber, true),
-            timeoutPromise
-        ]);
-        
-        if (!block || !block.transactions) {
-            return { gas: 0, count: 0 };
-        }
-        
-        let totalGas = 0;
-        let count = 0;
-        
-        for (const tx of block.transactions) {
-            if (tx.from && tx.from.toLowerCase() === targetAddress.toLowerCase()) {
-                // Get transaction receipt to get actual gas used
-                try {
-                    const receiptPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error('Receipt request timeout')), 5000)
-                    );
-                    
-                    const receipt = await Promise.race([
-                        web3.eth.getTransactionReceipt(tx.hash),
-                        receiptPromise
-                    ]);
-                    
-                    if (receipt && receipt.gasUsed) {
-                        totalGas += Number(receipt.gasUsed);
-                        count++;
+async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetries = 3) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            // Add timeout to block requests
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Block request timeout')), 8000)
+            );
+            
+            const block = await Promise.race([
+                web3.eth.getBlock(blockNumber, true),
+                timeoutPromise
+            ]);
+            
+            if (!block || !block.transactions) {
+                return { gas: 0, count: 0 };
+            }
+            
+            let totalGas = 0;
+            let count = 0;
+            
+            for (const tx of block.transactions) {
+                if (tx.from && tx.from.toLowerCase() === targetAddress.toLowerCase()) {
+                    // Get transaction receipt to get actual gas used
+                    try {
+                        const receiptPromise = new Promise((_, reject) => 
+                            setTimeout(() => reject(new Error('Receipt request timeout')), 4000)
+                        );
+                        
+                        const receipt = await Promise.race([
+                            web3.eth.getTransactionReceipt(tx.hash),
+                            receiptPromise
+                        ]);
+                        
+                        if (receipt && receipt.gasUsed) {
+                            totalGas += Number(receipt.gasUsed);
+                            count++;
+                        }
+                    } catch (receiptError) {
+                        console.error(`Error getting receipt for tx ${tx.hash}:`, receiptError.message);
+                        // Continue processing other transactions
                     }
-                } catch (receiptError) {
-                    console.error(`Error getting receipt for tx ${tx.hash}:`, receiptError.message);
-                    // Continue processing other transactions
                 }
             }
+            
+            return { gas: totalGas, count };
+            
+        } catch (error) {
+            console.error(`Error processing block ${blockNumber} (attempt ${attempt}):`, error.message);
+            
+            // Check if it's a rate limit error (HTML response)
+            if (error.message.includes('Unexpected token') && error.message.includes('<html>')) {
+                console.log(`Rate limit detected for block ${blockNumber}, retrying in ${attempt * 500}ms...`);
+                await new Promise(resolve => setTimeout(resolve, attempt * 500)); // Exponential backoff
+                continue;
+            }
+            
+            // For other errors, don't retry if it's the last attempt
+            if (attempt === maxRetries) {
+                return { gas: 0, count: 0 };
+            }
+            
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, attempt * 200));
         }
-        
-        return { gas: totalGas, count };
-    } catch (error) {
-        console.error(`Error processing block ${blockNumber}:`, error.message);
-        return { gas: 0, count: 0 };
     }
+    
+    return { gas: 0, count: 0 };
 }
 
 function isValidAddress(address) {

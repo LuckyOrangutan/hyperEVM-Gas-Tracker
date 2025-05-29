@@ -16,11 +16,11 @@
             <div class="scan-options">
                 <label class="radio-option">
                     <input type="radio" name="scanType" value="recent" checked>
-                    <span>Recent (10K blocks)</span>
+                    <span>Recent (5K blocks) - Recommended</span>
                 </label>
-                <label class="radio-option">
-                    <input type="radio" name="scanType" value="full">
-                    <span>Full History (All blocks)</span>
+                <label class="radio-option disabled">
+                    <input type="radio" name="scanType" value="full" disabled>
+                    <span>Full History (Temporarily disabled due to rate limits)</span>
                 </label>
             </div>
             <button onclick="trackGas()">Track Gas</button>
