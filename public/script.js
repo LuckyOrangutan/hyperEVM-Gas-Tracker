@@ -21,22 +21,14 @@ async function trackGas() {
         return;
     }
     
-    // Get scan type
-    const scanType = document.querySelector('input[name="scanType"]:checked').value;
-    
-    if (scanType === 'lifetime') {
-        await performLifetimeScan(address);
-    } else if (scanType === 'efficient') {
-        await performEfficientScan(address);
-    } else {
-        await performRecentScan(address);
-    }
+    // Always use the smart gas tracking (API with fallback)
+    await performSmartGasTracking(address);
 }
 
-async function performRecentScan(address) {
+async function performSmartGasTracking(address) {
     const loadingDiv = document.getElementById('loading');
     
-    const loadingMessage = 'Scanning recent 1,000 blocks... This should take 10-30 seconds.';
+    const loadingMessage = 'Analyzing lifetime gas usage... Trying efficient API method first.';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     
@@ -46,7 +38,7 @@ async function performRecentScan(address) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ address, fullHistory: false })
+            body: JSON.stringify({ address })
         });
         
         if (!response.ok) {

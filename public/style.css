@@ -42,48 +42,6 @@ p {
     margin-bottom: 30px;
 }
 
-.scan-options {
-    display: flex;
-    gap: 20px;
-    justify-content: center;
-}
-
-.radio-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    padding: 8px 12px;
-    border-radius: 6px;
-    transition: background-color 0.2s;
-}
-
-.radio-option:hover {
-    background-color: #f0f0f0;
-}
-
-.radio-option input[type="radio"] {
-    margin: 0;
-}
-
-.radio-option span {
-    font-size: 14px;
-    color: #555;
-}
-
-.radio-option.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.radio-option.disabled:hover {
-    background-color: transparent;
-}
-
-.radio-option.disabled span {
-    color: #999;
-}
-
 #addressInput {
     width: 100%;
     padding: 15px;
@@ -207,11 +165,6 @@ button:hover {
     .container {
         margin: 20px;
         padding: 20px;
-    }
-    
-    .scan-options {
-        flex-direction: column;
-        gap: 10px;
     }
     
     h1 {

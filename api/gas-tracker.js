@@ -30,15 +30,29 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Request body is required' });
         }
         
-        const { address, fullHistory = false } = req.body;
-        console.log('Parsed request - Address:', address, 'Full History:', fullHistory);
+        const { address } = req.body;
+        console.log('Parsed request - Address:', address);
         
         if (!address || !isValidAddress(address)) {
             return res.status(400).json({ error: 'Invalid address provided' });
         }
         
-        console.log(`Tracking gas for address: ${address}`);
+        console.log(`Starting comprehensive gas tracking for address: ${address}`);
         
+        // First try the efficient Blockscout API method
+        try {
+            console.log('Trying Blockscout API first...');
+            const apiResult = await tryBlockscoutAPI(address);
+            if (apiResult) {
+                console.log('Blockscout API successful');
+                return res.json(apiResult);
+            }
+        } catch (apiError) {
+            console.log('Blockscout API failed, falling back to RPC scanning:', apiError.message);
+        }
+        
+        // Fallback to RPC scanning
+        console.log('Using RPC fallback method...');
         const web3 = new Web3(HYPEREVM_RPC);
         
         // Get the latest block number
@@ -49,18 +63,10 @@ export default async function handler(req, res) {
         let totalGas = 0;
         let transactionCount = 0;
         
-        // Determine scan range - disable full history due to rate limiting
-        let startBlock, batchSize, sequentialProcessing;
-        if (fullHistory) {
-            // Full history scanning disabled due to RPC rate limits
-            return res.status(400).json({ 
-                error: 'Full history scanning is temporarily disabled due to RPC rate limits. Use recent blocks instead.' 
-            });
-        } else {
-            startBlock = Math.max(0, latestBlock - 1000); // Further reduced to 1K blocks for speed
-            batchSize = 20; // Larger batches but fewer blocks
-            sequentialProcessing = false; // Use batch processing for speed
-        }
+        // Scan recent blocks only for fallback
+        const startBlock = Math.max(0, latestBlock - 1000);
+        const batchSize = 20;
+        const sequentialProcessing = false;
         
         if (sequentialProcessing) {
             console.log(`Starting sequential processing from block ${startBlock} to ${latestBlock}`);
@@ -118,9 +124,10 @@ export default async function handler(req, res) {
             totalGas: totalGas.toFixed(6),
             transactionCount,
             blocksScanned: latestBlock - startBlock + 1,
-            scanType: 'recent',
+            scanType: 'fallback',
+            method: 'RPC Block Scanning',
             latestBlock: latestBlock,
-            note: 'Scanned last 1,000 blocks. Gas cost = gas_used × gas_price converted from wei to HYPE.'
+            note: 'Blockscout API unavailable, used RPC fallback to scan last 1,000 blocks. Gas cost = gas_used × gas_price converted from wei to HYPE.'
         });
         
     } catch (error) {
@@ -249,6 +256,72 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
     }
     
     return { gas: 0, count: 0 };
+}
+
+async function tryBlockscoutAPI(address) {
+    let allTransactions = [];
+    let totalGas = 0;
+    let page = 1;
+    const limit = 50;
+    
+    // Try up to 10 pages for fallback
+    while (page <= 10) {
+        console.log(`Fetching Blockscout page ${page}...`);
+        
+        const url = `https://www.hyperscan.com/api/v2/addresses/${address}/transactions?page=${page}&limit=${limit}`;
+        
+        const response = await fetch(url, {
+            headers: {
+                'Accept': 'application/json',
+                'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
+            },
+            timeout: 8000
+        });
+        
+        if (!response.ok) {
+            throw new Error(`Blockscout API returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.items || data.items.length === 0) {
+            break;
+        }
+        
+        // Process transactions from this page
+        for (const tx of data.items) {
+            if (tx.from && tx.from.hash && tx.from.hash.toLowerCase() === address.toLowerCase()) {
+                const gasUsed = parseInt(tx.gas_used || '0');
+                const gasPrice = parseInt(tx.gas_price || '0');
+                const gasCostWei = gasUsed * gasPrice;
+                const gasCostHype = gasCostWei / Math.pow(10, 18);
+                
+                totalGas += gasCostHype;
+                allTransactions.push({
+                    hash: tx.hash,
+                    gasUsed: gasUsed,
+                    gasPrice: gasPrice,
+                    gasCostHype: gasCostHype
+                });
+            }
+        }
+        
+        if (data.items.length < limit) {
+            break;
+        }
+        
+        page++;
+        await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    return {
+        totalGas: totalGas.toFixed(6),
+        transactionCount: allTransactions.length,
+        scanType: 'efficient',
+        method: 'Blockscout API',
+        note: `Scanned all transactions directly via Blockscout API. Gas cost = gas_used × gas_price converted from wei to HYPE.`,
+        pagesScanned: page - 1
+    };
 }
 
 function isValidAddress(address) {
