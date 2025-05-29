@@ -49,9 +49,9 @@ export default async function handler(req, res) {
             console.log('Transaction scanning failed:', apiError.message);
             
             return res.status(503).json({
-                error: 'Unable to retrieve transaction data from hyperscan.com',
-                details: 'This tracker calculates exact gas fees by scanning every transaction where this address paid gas.',
-                suggestion: 'Please try again in a few minutes when the API recovers.',
+                error: 'Hyperscan API is currently unavailable',
+                details: 'This tracker requires access to Hyperscan to calculate exact gas fees for airdrop points.',
+                suggestion: 'Hyperscan may be down or have changed their API. Please try again later or contact support.',
                 apiError: apiError.message
             });
         }
@@ -109,44 +109,101 @@ export default async function handler(req, res) {
 async function scanAllTransactions(address) {
     console.log(`Starting transaction scan for address: ${address}`);
     
-    // First, let's try to get basic info using RPC
+    let totalGasFeesHype = 0;
+    let transactionCount = 0;
+    let page = 1;
+    const limit = 100; // Try smaller limit
+    
     try {
-        const web3 = new Web3(HYPEREVM_RPC);
-        const balance = await web3.eth.getBalance(address);
-        const txCount = await web3.eth.getTransactionCount(address);
+        // Let's try the most likely API endpoints for Hyperscan
+        while (true) {
+            const endpoints = [
+                // Try various possible Hyperscan API patterns
+                `https://api.hyperscan.xyz/accounts/${address}/transactions?page=${page}&limit=${limit}`,
+                `https://hyperscan.xyz/api/v1/accounts/${address}/transactions?page=${page}&limit=${limit}`,
+                `https://api.hyperscan.io/v1/address/${address}/txs?page=${page}&limit=${limit}`,
+                // Common blockchain explorer API patterns
+                `https://hyperscan.xyz/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}`,
+                `https://api.hyperscan.xyz/v1/txs?address=${address}&page=${page}&limit=${limit}`
+            ];
+            
+            let response;
+            let data;
+            let success = false;
+            
+            for (const endpoint of endpoints) {
+                try {
+                    console.log(`Trying: ${endpoint}`);
+                    response = await fetch(endpoint, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    
+                    if (response.ok) {
+                        data = await response.json();
+                        console.log('Response structure:', Object.keys(data));
+                        success = true;
+                        break;
+                    }
+                } catch (e) {
+                    console.log(`Failed: ${e.message}`);
+                }
+            }
+            
+            if (!success) {
+                throw new Error('Unable to connect to Hyperscan API. Please check if the service is available.');
+            }
+            
+            // Handle different possible response formats
+            const transactions = data.items || data.result || data.txs || data.transactions || data.data || [];
+            
+            if (!Array.isArray(transactions) || transactions.length === 0) {
+                console.log('No more transactions found');
+                break;
+            }
+            
+            // Process transactions
+            for (const tx of transactions) {
+                // Check various possible field names for the sender
+                const from = tx.from || tx.from_address || tx.sender;
+                const fee = tx.fee || tx.txfee || tx.gasUsed || tx.gas_fee;
+                
+                if (from && from.toLowerCase() === address.toLowerCase() && fee) {
+                    const feeHype = typeof fee === 'string' ? parseFloat(fee) : fee;
+                    totalGasFeesHype += feeHype;
+                    transactionCount++;
+                    
+                    console.log(`TX: fee=${feeHype} HYPE`);
+                }
+            }
+            
+            // Check if we've fetched all transactions
+            if (transactions.length < limit) {
+                break;
+            }
+            
+            page++;
+            await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
+        }
         
-        console.log(`Address has balance: ${web3.utils.fromWei(balance, 'ether')} HYPE`);
-        console.log(`Address has made ${txCount} transactions`);
-        
-        // For now, return an estimate based on transaction count
-        // Average gas per tx is around 21000-100000, average price ~25 gwei
-        const avgGasPerTx = 50000;
-        const avgGasPrice = 25; // gwei
-        const estimatedGas = (txCount * avgGasPerTx * avgGasPrice) / 1e9;
+        console.log(`Total exact gas fees: ${totalGasFeesHype} HYPE from ${transactionCount} transactions`);
         
         return {
-            totalGas: estimatedGas.toFixed(6),
-            totalGasDisplay: `~${estimatedGas.toFixed(6)} HYPE (estimated)`,
-            transactionCount: txCount,
-            totalGasWei: (estimatedGas * 1e18).toString(),
-            gasUnitsUsed: 'Estimated',
-            averageGasPrice: '~25 gwei',
-            calculation: `Estimated from ${txCount} transactions (avg 50k gas @ 25 gwei)`,
-            method: 'rpc_estimation'
+            totalGas: totalGasFeesHype.toFixed(6),
+            totalGasDisplay: `${totalGasFeesHype.toFixed(6)} HYPE`,
+            transactionCount: transactionCount,
+            totalGasWei: (totalGasFeesHype * Math.pow(10, 18)).toString(),
+            gasUnitsUsed: 'Exact calculation',
+            averageGasPrice: 'Variable',
+            calculation: `Exact sum of ${transactionCount.toLocaleString()} transaction fees = ${totalGasFeesHype.toFixed(6)} HYPE`,
+            method: 'exact_fee_sum'
         };
+        
     } catch (error) {
-        console.error('RPC estimation failed:', error);
-        
-        return {
-            totalGas: '0.000000',
-            totalGasDisplay: 'Unable to calculate',
-            transactionCount: 0,
-            totalGasWei: '0',
-            gasUnitsUsed: 'N/A',
-            averageGasPrice: 'N/A',
-            calculation: 'Gas tracking temporarily unavailable - Hyperscan API is down',
-            method: 'unavailable'
-        };
+        console.error('Error scanning transactions:', error);
+        throw error;
     }
 }
 
