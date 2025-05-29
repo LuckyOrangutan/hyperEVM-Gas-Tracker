@@ -37,98 +37,27 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Invalid address provided' });
         }
         
-        console.log(`Starting comprehensive gas tracking for address: ${address}`);
+        console.log(`Starting lifetime gas tracking for address: ${address}`);
         
-        // First try the efficient Blockscout API method
+        // Try the Blockscout API - the only method that gives complete lifetime data
         try {
-            console.log('Trying Blockscout API first...');
+            console.log('Fetching complete transaction history via Blockscout API...');
             const apiResult = await tryBlockscoutAPI(address);
             if (apiResult) {
-                console.log('Blockscout API successful');
+                console.log('Successfully retrieved complete lifetime gas data');
                 return res.json(apiResult);
             }
         } catch (apiError) {
-            console.log('Blockscout API failed, falling back to RPC scanning:', apiError.message);
+            console.log('Blockscout API failed:', apiError.message);
+            
+            // Return a clear error - we can't provide incomplete data
+            return res.status(503).json({
+                error: 'Unable to retrieve complete lifetime gas data. The Blockscout API is currently unavailable.',
+                details: 'This tracker only provides complete lifetime totals. Partial data from recent blocks would be misleading.',
+                suggestion: 'Please try again in a few minutes when the API service recovers.',
+                apiError: apiError.message
+            });
         }
-        
-        // Fallback to RPC scanning
-        console.log('Using RPC fallback method...');
-        const web3 = new Web3(HYPEREVM_RPC);
-        
-        // Get the latest block number
-        const latestBlockBigInt = await web3.eth.getBlockNumber();
-        const latestBlock = Number(latestBlockBigInt);
-        console.log(`Latest block: ${latestBlock}`);
-        
-        let totalGas = 0;
-        let transactionCount = 0;
-        
-        // Scan recent blocks only for fallback
-        const startBlock = Math.max(0, latestBlock - 1000);
-        const batchSize = 20;
-        const sequentialProcessing = false;
-        
-        if (sequentialProcessing) {
-            console.log(`Starting sequential processing from block ${startBlock} to ${latestBlock}`);
-            // Process blocks one by one with delays
-            for (let blockNum = startBlock; blockNum <= latestBlock; blockNum++) {
-                try {
-                    if (blockNum % 100 === 0) {
-                        console.log(`Processing block ${blockNum} (${((blockNum - startBlock) / (latestBlock - startBlock) * 100).toFixed(1)}% complete)`);
-                    }
-                    
-                    const result = await processBlockWithRetry(web3, blockNum, address);
-                    totalGas += result.gas;
-                    transactionCount += result.count;
-                    
-                    // Add delay between requests to avoid rate limiting
-                    if (blockNum % 10 === 0) {
-                        await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay every 10 blocks
-                    }
-                } catch (error) {
-                    console.error(`Failed to process block ${blockNum} after retries:`, error.message);
-                    console.error(`Error details:`, error);
-                    // Continue processing other blocks
-                }
-            }
-            console.log(`Completed processing. Total gas: ${totalGas}, Transaction count: ${transactionCount}`);
-        } else {
-            // Optimized batch processing
-            console.log(`Starting batch processing from block ${startBlock} to ${latestBlock}`);
-            for (let i = startBlock; i <= latestBlock; i += batchSize) {
-                const endBlock = Math.min(i + batchSize - 1, latestBlock);
-                console.log(`Processing blocks ${i} to ${endBlock} (${((i - startBlock) / (latestBlock - startBlock) * 100).toFixed(1)}% complete)`);
-                
-                const batchPromises = [];
-                for (let blockNum = i; blockNum <= endBlock; blockNum++) {
-                    batchPromises.push(processBlockWithRetry(web3, blockNum, address, 2)); // Fewer retries for speed
-                }
-                
-                const batchResults = await Promise.allSettled(batchPromises);
-                
-                for (const result of batchResults) {
-                    if (result.status === 'fulfilled') {
-                        totalGas += result.value.gas;
-                        transactionCount += result.value.count;
-                    }
-                }
-                
-                // Shorter delay between batches
-                await new Promise(resolve => setTimeout(resolve, 50));
-            }
-        }
-        
-        console.log(`Total gas found: ${totalGas}, Transaction count: ${transactionCount}`);
-        
-        res.json({
-            totalGas: totalGas.toFixed(6),
-            transactionCount,
-            blocksScanned: latestBlock - startBlock + 1,
-            scanType: 'fallback',
-            method: 'RPC Block Scanning',
-            latestBlock: latestBlock,
-            note: 'Blockscout API unavailable, used RPC fallback to scan last 1,000 blocks. Gas cost = gas_used × gas_price converted from wei to HYPE.'
-        });
         
     } catch (error) {
         console.error('=== ERROR TRACKING GAS ===');
@@ -177,85 +106,6 @@ export default async function handler(req, res) {
             details: process.env.NODE_ENV === 'development' ? error.stack : undefined
         });
     }
-}
-
-async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetries = 2) {
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            // Shorter timeout for faster processing
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Block request timeout')), 5000)
-            );
-            
-            const block = await Promise.race([
-                web3.eth.getBlock(blockNumber, true),
-                timeoutPromise
-            ]);
-            
-            if (!block || !block.transactions) {
-                return { gas: 0, count: 0 };
-            }
-            
-            let totalGas = 0;
-            let count = 0;
-            
-            for (const tx of block.transactions) {
-                if (tx.from && tx.from.toLowerCase() === targetAddress.toLowerCase()) {
-                    // Get transaction receipt to get actual gas used
-                    try {
-                        const receiptPromise = new Promise((_, reject) => 
-                            setTimeout(() => reject(new Error('Receipt request timeout')), 3000)
-                        );
-                        
-                        const receipt = await Promise.race([
-                            web3.eth.getTransactionReceipt(tx.hash),
-                            receiptPromise
-                        ]);
-                        
-                        if (receipt && receipt.gasUsed) {
-                            // Convert BigInt to Number for gas calculation
-                            const gasUsed = typeof receipt.gasUsed === 'bigint' ? Number(receipt.gasUsed) : receipt.gasUsed;
-                            
-                            // Get gas price from transaction
-                            const gasPrice = typeof tx.gasPrice === 'bigint' ? Number(tx.gasPrice) : (tx.gasPrice || 0);
-                            
-                            // Calculate actual gas cost in wei, then convert to HYPE
-                            const gasCostWei = gasUsed * gasPrice;
-                            const gasCostHype = gasCostWei / Math.pow(10, 18);
-                            
-                            totalGas += gasCostHype;
-                            count++;
-                        }
-                    } catch (receiptError) {
-                        console.error(`Error getting receipt for tx ${tx.hash}:`, receiptError.message);
-                        // Continue processing other transactions
-                    }
-                }
-            }
-            
-            return { gas: totalGas, count };
-            
-        } catch (error) {
-            console.error(`Error processing block ${blockNumber} (attempt ${attempt}):`, error.message);
-            
-            // Check if it's a rate limit error (HTML response)
-            if (error.message.includes('Unexpected token') && error.message.includes('<html>')) {
-                console.log(`Rate limit detected for block ${blockNumber}, retrying in ${attempt * 200}ms...`);
-                await new Promise(resolve => setTimeout(resolve, attempt * 200)); // Faster backoff
-                continue;
-            }
-            
-            // For other errors, don't retry if it's the last attempt
-            if (attempt === maxRetries) {
-                return { gas: 0, count: 0 };
-            }
-            
-            // Shorter wait before retry
-            await new Promise(resolve => setTimeout(resolve, attempt * 100));
-        }
-    }
-    
-    return { gas: 0, count: 0 };
 }
 
 async function tryBlockscoutAPI(address) {

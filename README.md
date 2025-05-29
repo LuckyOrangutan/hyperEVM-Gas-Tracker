@@ -4,7 +4,7 @@ A smart web application to track total HYPE gas burnt for any HyperEVM address w
 
 ## Features
 
-- 🚀 **Smart Dual-Method Scanning**: Tries efficient API first, falls back to RPC scanning
+- 🚀 **Complete Lifetime Data Only**: Uses Blockscout API for comprehensive transaction history
 - ⚡ **Lightning Fast**: 5-15 seconds for complete lifetime gas history
 - 💰 **Accurate Gas Costs**: Real HYPE amounts (gas_used × gas_price ÷ 10^18)
 - 🔄 **Automatic Retry Logic**: Handles API failures gracefully with exponential backoff
@@ -20,10 +20,11 @@ A smart web application to track total HYPE gas burnt for any HyperEVM address w
 
 ## How It Works
 
-### Smart Fallback System:
-1. **Primary**: Blockscout API (hyperscan.com) - scans all transactions instantly
-2. **Fallback**: RPC block scanning - scans recent 1,000 blocks if API fails
-3. **Auto-retry**: 3 attempts per API request with exponential backoff
+### Lifetime-Only Design:
+1. **Complete Data Only**: Uses Blockscout API to scan ALL transactions from genesis
+2. **No Partial Results**: Refuses to return incomplete recent-block data
+3. **Clear Failure**: If API unavailable, clearly explains why complete data isn't available
+4. **Auto-retry**: 3 attempts per API request with exponential backoff
 
 ### Gas Calculation:
 - Fetches all transactions where address is sender
@@ -58,6 +59,5 @@ vercel
 
 - **Frontend**: Vanilla HTML/CSS/JavaScript
 - **Backend**: Vercel serverless functions  
-- **Primary API**: Blockscout (hyperscan.com)
-- **Fallback**: Web3.js + HyperEVM RPC (rpc.hyperliquid.xyz/evm)
+- **Data Source**: Blockscout API (hyperscan.com) for complete transaction history
 - **Network**: HyperEVM Mainnet (Chain ID: 999)
