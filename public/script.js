@@ -64,127 +64,6 @@ async function performSmartGasTracking(address) {
     }
 }
 
-async function performLifetimeScan(address) {
-    const loadingDiv = document.getElementById('loading');
-    const progressDiv = document.getElementById('progress');
-    const progressFill = document.getElementById('progressFill');
-    const progressText = document.getElementById('progressText');
-    const progressDetails = document.getElementById('progressDetails');
-    
-    loadingDiv.textContent = 'Starting lifetime scan... This will scan the entire HyperEVM history.';
-    loadingDiv.classList.remove('hidden');
-    progressDiv.classList.remove('hidden');
-    
-    let chunk = 0;
-    let totalGas = 0;
-    let totalTransactions = 0;
-    let totalBlocksScanned = 0;
-    
-    try {
-        while (true) {
-            console.log(`Processing chunk ${chunk}...`);
-            
-            const response = await fetch('/api/lifetime-scan', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ address, chunk })
-            });
-            
-            if (!response.ok) {
-                let errorData;
-                try {
-                    errorData = await response.json();
-                } catch (parseError) {
-                    throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-                }
-                throw new Error(errorData.error || `Server error ${response.status}: ${response.statusText}`);
-            }
-            
-            const chunkData = await response.json();
-            console.log(`Chunk ${chunk} data:`, chunkData);
-            
-            // Accumulate results
-            totalGas += parseInt(chunkData.totalGas || '0');
-            totalTransactions += chunkData.transactionCount || 0;
-            totalBlocksScanned += chunkData.blocksScanned || 0;
-            
-            // Update progress
-            const progress = chunkData.progress || 0;
-            progressFill.style.width = `${progress}%`;
-            progressText.textContent = `${progress}% complete`;
-            progressDetails.textContent = `Chunk ${chunk + 1} - Found ${formatNumber(totalTransactions)} transactions, ${formatNumber(totalGas)} total gas`;
-            
-            if (chunkData.isComplete) {
-                console.log('Lifetime scan complete!');
-                break;
-            }
-            
-            chunk = chunkData.nextChunk || (chunk + 1);
-            
-            // Small delay between chunks
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
-        
-        // Display final results
-        const finalData = {
-            totalGas: totalGas.toString(),
-            transactionCount: totalTransactions,
-            blocksScanned: totalBlocksScanned,
-            scanType: 'lifetime',
-            note: 'Complete lifetime scan across all HyperEVM blocks'
-        };
-        
-        displayResults(address, finalData);
-        
-    } catch (error) {
-        handleError(error);
-    } finally {
-        loadingDiv.classList.add('hidden');
-        progressDiv.classList.add('hidden');
-    }
-}
-
-async function performEfficientScan(address) {
-    const loadingDiv = document.getElementById('loading');
-    
-    const loadingMessage = 'Scanning all transactions using Blockscout API... This should take 5-15 seconds.';
-    loadingDiv.textContent = loadingMessage;
-    loadingDiv.classList.remove('hidden');
-    
-    try {
-        const response = await fetch('/api/efficient-scan', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ address })
-        });
-        
-        if (!response.ok) {
-            let errorData;
-            try {
-                errorData = await response.json();
-            } catch (parseError) {
-                console.error('Failed to parse error response:', parseError);
-                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-            }
-            
-            console.error('Server error response:', errorData);
-            throw new Error(errorData.error || `Server error ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        console.log('Received efficient scan data:', data);
-        displayResults(address, data);
-    } catch (error) {
-        handleError(error);
-    } finally {
-        loadingDiv.classList.add('hidden');
-    }
-}
-
 function handleError(error) {
     console.error('Frontend error:', error);
     console.error('Error name:', error.name);
@@ -205,11 +84,17 @@ function isValidAddress(address) {
 }
 
 function displayResults(address, data) {
+    // Main gas amount display
+    document.getElementById('totalGasAmount').textContent = `${data.totalGas} HYPE`;
+    
+    // Detail rows
     document.getElementById('resultAddress').textContent = address;
-    document.getElementById('totalGas').textContent = formatNumber(data.totalGas) + ' HYPE';
     document.getElementById('txCount').textContent = formatNumber(data.transactionCount);
-    document.getElementById('blocksScanned').textContent = formatNumber(data.blocksScanned);
-    document.getElementById('scanType').textContent = data.scanType === 'full' ? 'Full History' : 'Recent Blocks';
+    document.getElementById('gasUnits').textContent = data.gasUnitsUsed;
+    document.getElementById('gasPrice').textContent = data.averageGasPrice;
+    
+    // Calculation explanation
+    document.getElementById('calculation').textContent = data.calculation;
     
     document.getElementById('results').classList.remove('hidden');
 }

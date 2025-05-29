@@ -27,26 +27,33 @@
         </div>
         
         <div id="results" class="results hidden">
-            <h2>Gas Usage Results</h2>
-            <div class="result-item">
-                <span class="label">Address:</span>
-                <span id="resultAddress"></span>
+            <div class="gas-burnt-header">
+                <h2>🔥 Total Gas Burnt</h2>
+                <div class="gas-amount" id="totalGasAmount">Loading...</div>
             </div>
-            <div class="result-item">
-                <span class="label">Total HYPE Gas Burnt:</span>
-                <span id="totalGas"></span>
+            
+            <div class="gas-details">
+                <div class="detail-row">
+                    <span class="detail-label">Address:</span>
+                    <span class="detail-value" id="resultAddress"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Total Transactions:</span>
+                    <span class="detail-value" id="txCount"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Gas Units Used:</span>
+                    <span class="detail-value" id="gasUnits"></span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Average Gas Price:</span>
+                    <span class="detail-value" id="gasPrice"></span>
+                </div>
             </div>
-            <div class="result-item">
-                <span class="label">Number of Transactions:</span>
-                <span id="txCount"></span>
-            </div>
-            <div class="result-item">
-                <span class="label">Blocks Scanned:</span>
-                <span id="blocksScanned"></span>
-            </div>
-            <div class="result-item">
-                <span class="label">Scan Type:</span>
-                <span id="scanType"></span>
+            
+            <div class="calculation-info">
+                <div class="calculation-title">💡 How we calculated this:</div>
+                <div class="calculation-formula" id="calculation"></div>
             </div>
         </div>
         

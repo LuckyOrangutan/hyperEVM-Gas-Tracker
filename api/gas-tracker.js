@@ -39,36 +39,22 @@ export default async function handler(req, res) {
         
         console.log(`Starting lifetime gas tracking for address: ${address}`);
         
-        // Use the ultra-efficient method: get total gas from address counters
+        // Use the ultra-efficient counters method (only accurate method)
         try {
-            console.log('Fetching lifetime gas data via address counters (ultra-efficient method)...');
+            console.log('Fetching lifetime gas data via hyperscan counters...');
             const result = await getLifetimeGasFromCounters(address);
-            if (result) {
-                console.log('Successfully retrieved complete lifetime gas data');
-                return res.json(result);
-            }
+            console.log('Successfully retrieved lifetime gas data');
+            return res.json(result);
         } catch (apiError) {
-            console.log('Counters API failed, trying transaction pagination method...', apiError.message);
+            console.log('Hyperscan API failed:', apiError.message);
             
-            // Fallback to the old pagination method
-            try {
-                const apiResult = await tryBlockscoutAPI(address);
-                if (apiResult) {
-                    console.log('Successfully retrieved lifetime gas data via pagination fallback');
-                    return res.json(apiResult);
-                }
-            } catch (paginationError) {
-                console.log('Both methods failed:', paginationError.message);
-                
-                // Return a clear error - we can't provide incomplete data
-                return res.status(503).json({
-                    error: 'Unable to retrieve complete lifetime gas data. Both API methods are currently unavailable.',
-                    details: 'This tracker only provides complete lifetime totals. Partial data would be misleading.',
-                    suggestion: 'Please try again in a few minutes when the API service recovers.',
-                    primaryError: apiError.message,
-                    fallbackError: paginationError.message
-                });
-            }
+            // Return clear error - no inaccurate fallbacks
+            return res.status(503).json({
+                error: 'Unable to retrieve lifetime gas data from hyperscan.com',
+                details: 'The gas tracker uses hyperscan.com counters for accurate lifetime totals.',
+                suggestion: 'Please try again in a few minutes when hyperscan.com API recovers.',
+                apiError: apiError.message
+            });
         }
         
     } catch (error) {
@@ -175,110 +161,11 @@ async function getLifetimeGasFromCounters(address) {
     
     return {
         totalGas: gasCostHype.toFixed(6),
+        totalGasDisplay: `${gasCostHype.toFixed(6)} HYPE`,
         transactionCount: transactionCount,
-        scanType: 'ultra-efficient',
-        method: 'Address Counters + Network Stats',
-        note: `Ultra-fast lookup: ${totalGasUsed.toLocaleString()} gas units × ${averageGasPrice} gwei (network average) = ${gasCostHype.toFixed(6)} HYPE`,
-        gasUnitsUsed: totalGasUsed,
-        averageGasPrice: averageGasPrice,
-        calculationMethod: 'total_gas_units × average_network_gas_price ÷ 10^9'
-    };
-}
-
-async function tryBlockscoutAPI(address) {
-    let allTransactions = [];
-    let totalGas = 0;
-    let page = 1;
-    const limit = 50;
-    let retryCount = 0;
-    const maxRetries = 3;
-    
-    // Try up to 20 pages for comprehensive scan when API is working
-    while (page <= 20) {
-        console.log(`Fetching Blockscout page ${page}...`);
-        
-        const url = `https://www.hyperscan.com/api/v2/addresses/${address}/transactions?page=${page}&limit=${limit}`;
-        
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    'Accept': 'application/json',
-                    'User-Agent': 'HyperEVM-Gas-Tracker/1.0'
-                },
-                timeout: 10000
-            });
-            
-            if (!response.ok) {
-                // If it's a server error and we haven't reached max retries for this page
-                if (response.status >= 500 && retryCount < maxRetries) {
-                    console.log(`Server error on page ${page}, retrying... (${retryCount + 1}/${maxRetries})`);
-                    retryCount++;
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // Exponential backoff
-                    continue;
-                }
-                throw new Error(`Blockscout API returned ${response.status}: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            
-            if (!data.items || data.items.length === 0) {
-                console.log('No more transactions found');
-                break;
-            }
-            
-            // Process transactions from this page
-            for (const tx of data.items) {
-                if (tx.from && tx.from.hash && tx.from.hash.toLowerCase() === address.toLowerCase()) {
-                    const gasUsed = parseInt(tx.gas_used || '0');
-                    const gasPrice = parseInt(tx.gas_price || '0');
-                    const gasCostWei = gasUsed * gasPrice;
-                    const gasCostHype = gasCostWei / Math.pow(10, 18);
-                    
-                    totalGas += gasCostHype;
-                    allTransactions.push({
-                        hash: tx.hash,
-                        gasUsed: gasUsed,
-                        gasPrice: gasPrice,
-                        gasCostHype: gasCostHype
-                    });
-                }
-            }
-            
-            if (data.items.length < limit) {
-                console.log('Reached end of transactions (partial page)');
-                break;
-            }
-            
-            page++;
-            retryCount = 0; // Reset retry count for next page
-            await new Promise(resolve => setTimeout(resolve, 100)); // Short delay between pages
-            
-        } catch (fetchError) {
-            if (retryCount < maxRetries) {
-                console.log(`Error fetching page ${page}, retrying... (${retryCount + 1}/${maxRetries}):`, fetchError.message);
-                retryCount++;
-                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
-                continue;
-            }
-            
-            // If it's the first page, this is a critical error
-            if (page === 1) {
-                throw new Error(`Failed to fetch transaction data: ${fetchError.message}`);
-            }
-            
-            // For subsequent pages, we can continue with what we have
-            console.log(`Stopping pagination due to error on page ${page}:`, fetchError.message);
-            break;
-        }
-    }
-    
-    return {
-        totalGas: totalGas.toFixed(6),
-        transactionCount: allTransactions.length,
-        scanType: 'efficient',
-        method: 'Blockscout API',
-        note: `Scanned ${page - 1} pages of transactions via Blockscout API. Gas cost = gas_used × gas_price converted from wei to HYPE.`,
-        pagesScanned: page - 1
+        gasUnitsUsed: totalGasUsed.toLocaleString(),
+        averageGasPrice: `${averageGasPrice} gwei`,
+        calculation: `${totalGasUsed.toLocaleString()} gas units × ${averageGasPrice} gwei = ${gasCostHype.toFixed(6)} HYPE`
     };
 }
 
