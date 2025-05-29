@@ -34,10 +34,10 @@ vercel
 
 ## How it Works
 
-The app scans the last 5000 blocks on the HyperEVM testnet to find transactions sent from the specified address, then calculates the total gas used across all those transactions.
+The app scans the last 10,000 blocks on the HyperEVM mainnet (Chain ID: 999) to find transactions sent from the specified address, then calculates the total gas used across all those transactions.
 
 ## Tech Stack
 
 - Frontend: Vanilla HTML/CSS/JavaScript
 - Backend: Vercel serverless functions
-- Blockchain: Web3.js connecting to HyperEVM testnet
+- Blockchain: Web3.js connecting to HyperEVM mainnet (rpc.hyperliquid.xyz/evm)

@@ -1,6 +1,6 @@
 const { Web3 } = require('web3');
 
-const HYPEREVM_RPC = 'https://api.hyperliquid-testnet.xyz/evm';
+const HYPEREVM_RPC = 'https://rpc.hyperliquid.xyz/evm';
 
 export default async function handler(req, res) {
     // Enable CORS
@@ -34,8 +34,8 @@ export default async function handler(req, res) {
         let totalGas = 0;
         let transactionCount = 0;
         
-        // Scan recent blocks (last 5000 blocks for faster response on serverless)
-        const startBlock = Math.max(0, Number(latestBlock) - 5000);
+        // Scan recent blocks (last 10000 blocks on mainnet)
+        const startBlock = Math.max(0, Number(latestBlock) - 10000);
         const batchSize = 100; // Smaller batches for serverless
         
         for (let i = startBlock; i <= latestBlock; i += batchSize) {
