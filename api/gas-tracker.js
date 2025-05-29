@@ -42,7 +42,8 @@ export default async function handler(req, res) {
         const web3 = new Web3(HYPEREVM_RPC);
         
         // Get the latest block number
-        const latestBlock = await web3.eth.getBlockNumber();
+        const latestBlockBigInt = await web3.eth.getBlockNumber();
+        const latestBlock = Number(latestBlockBigInt);
         console.log(`Latest block: ${latestBlock}`);
         
         let totalGas = 0;
@@ -56,7 +57,7 @@ export default async function handler(req, res) {
                 error: 'Full history scanning is temporarily disabled due to RPC rate limits. Use recent blocks instead.' 
             });
         } else {
-            startBlock = Math.max(0, Number(latestBlock) - 5000); // Reduced to 5K blocks
+            startBlock = Math.max(0, latestBlock - 5000); // Reduced to 5K blocks
             batchSize = 10; // Much smaller batches
             sequentialProcessing = true; // Process sequentially to avoid rate limits
         }
@@ -115,9 +116,9 @@ export default async function handler(req, res) {
         res.json({
             totalGas: totalGas.toString(),
             transactionCount,
-            blocksScanned: Number(latestBlock) - startBlock + 1,
+            blocksScanned: latestBlock - startBlock + 1,
             scanType: 'recent',
-            latestBlock: Number(latestBlock),
+            latestBlock: latestBlock,
             note: 'Scanned last 5,000 blocks to avoid rate limits'
         });
         
@@ -204,7 +205,9 @@ async function processBlockWithRetry(web3, blockNumber, targetAddress, maxRetrie
                         ]);
                         
                         if (receipt && receipt.gasUsed) {
-                            totalGas += Number(receipt.gasUsed);
+                            // Convert BigInt to Number for gas calculation
+                            const gasUsed = typeof receipt.gasUsed === 'bigint' ? Number(receipt.gasUsed) : receipt.gasUsed;
+                            totalGas += gasUsed;
                             count++;
                         }
                     } catch (receiptError) {
