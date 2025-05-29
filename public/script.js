@@ -19,7 +19,13 @@ async function trackGas() {
         return;
     }
     
-    // Show loading
+    // Get scan type
+    const scanType = document.querySelector('input[name="scanType"]:checked').value;
+    const fullHistory = scanType === 'full';
+    
+    // Show loading with appropriate message
+    const loadingMessage = fullHistory ? 'Scanning entire HyperEVM history... This may take up to 60 seconds.' : 'Scanning recent blocks...';
+    loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     
     try {
@@ -28,18 +34,22 @@ async function trackGas() {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ address })
+            body: JSON.stringify({ address, fullHistory })
         });
         
-        const data = await response.json();
-        
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to fetch gas data');
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error occurred' }));
+            throw new Error(errorData.error || 'Failed to fetch gas data');
         }
         
+        const data = await response.json();
         displayResults(address, data);
     } catch (error) {
-        showError('Error fetching gas data: ' + error.message);
+        let errorMessage = error.message;
+        if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+            errorMessage = 'Request timed out. Try scanning recent blocks instead of full history.';
+        }
+        showError('Error fetching gas data: ' + errorMessage);
     } finally {
         loadingDiv.classList.add('hidden');
     }
@@ -53,6 +63,8 @@ function displayResults(address, data) {
     document.getElementById('resultAddress').textContent = address;
     document.getElementById('totalGas').textContent = formatNumber(data.totalGas) + ' HYPE';
     document.getElementById('txCount').textContent = formatNumber(data.transactionCount);
+    document.getElementById('blocksScanned').textContent = formatNumber(data.blocksScanned);
+    document.getElementById('scanType').textContent = data.scanType === 'full' ? 'Full History' : 'Recent Blocks';
     
     document.getElementById('results').classList.remove('hidden');
 }

@@ -13,6 +13,16 @@
         
         <div class="input-section">
             <input type="text" id="addressInput" placeholder="Enter HyperEVM address (0x...)">
+            <div class="scan-options">
+                <label class="radio-option">
+                    <input type="radio" name="scanType" value="recent" checked>
+                    <span>Recent (10K blocks)</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="scanType" value="full">
+                    <span>Full History (All blocks)</span>
+                </label>
+            </div>
             <button onclick="trackGas()">Track Gas</button>
         </div>
         
@@ -31,6 +41,14 @@
             <div class="result-item">
                 <span class="label">Number of Transactions:</span>
                 <span id="txCount"></span>
+            </div>
+            <div class="result-item">
+                <span class="label">Blocks Scanned:</span>
+                <span id="blocksScanned"></span>
+            </div>
+            <div class="result-item">
+                <span class="label">Scan Type:</span>
+                <span id="scanType"></span>
             </div>
         </div>
         
