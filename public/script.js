@@ -112,3 +112,94 @@ document.getElementById('addressInput').addEventListener('keypress', function(e)
         trackGas();
     }
 });
+
+// Donation functionality
+const DONATION_ADDRESS = '0xb0bc544cCE3cF5e869D1733EeCB3E8c01abBb47F';
+
+async function copyDonationAddress() {
+    try {
+        await navigator.clipboard.writeText(DONATION_ADDRESS);
+        
+        // Change button text temporarily
+        const button = document.querySelector('.donation-button');
+        const originalHTML = button.innerHTML;
+        button.innerHTML = '<span class="donation-icon">✓</span><span class="donation-text">Copied! Thank you!</span>';
+        button.classList.add('copied');
+        
+        // Trigger confetti
+        createConfetti();
+        
+        // Reset button after 3 seconds
+        setTimeout(() => {
+            button.innerHTML = originalHTML;
+            button.classList.remove('copied');
+        }, 3000);
+    } catch (err) {
+        console.error('Failed to copy address:', err);
+        alert(`Donation address: ${DONATION_ADDRESS}`);
+    }
+}
+
+// Confetti animation
+function createConfetti() {
+    const canvas = document.getElementById('confettiCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    canvas.style.display = 'block';
+    
+    const confettiCount = 150;
+    const confetti = [];
+    
+    // Confetti colors
+    const colors = ['#ff0a54', '#ff477e', '#ff7096', '#ff85a1', '#fbb1bd', '#f9bec7', '#7209b7', '#560bad', '#480ca8', '#3a0ca3', '#3f37c9', '#4361ee'];
+    
+    // Create confetti particles
+    for (let i = 0; i < confettiCount; i++) {
+        confetti.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height - canvas.height,
+            vx: Math.random() * 3 - 1.5,
+            vy: Math.random() * 3 + 2,
+            size: Math.random() * 8 + 5,
+            color: colors[Math.floor(Math.random() * colors.length)],
+            angle: Math.random() * 360,
+            angularVelocity: Math.random() * 10 - 5
+        });
+    }
+    
+    let animationId;
+    
+    function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let allOffScreen = true;
+        
+        confetti.forEach(particle => {
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+            particle.vy += 0.1; // Gravity
+            particle.angle += particle.angularVelocity;
+            
+            if (particle.y < canvas.height) {
+                allOffScreen = false;
+            }
+            
+            ctx.save();
+            ctx.translate(particle.x, particle.y);
+            ctx.rotate((particle.angle * Math.PI) / 180);
+            ctx.fillStyle = particle.color;
+            ctx.fillRect(-particle.size / 2, -particle.size / 2, particle.size, particle.size);
+            ctx.restore();
+        });
+        
+        if (!allOffScreen) {
+            animationId = requestAnimationFrame(animate);
+        } else {
+            canvas.style.display = 'none';
+            cancelAnimationFrame(animationId);
+        }
+    }
+    
+    animate();
+}

@@ -337,3 +337,72 @@ button:active {
         font-size: 1.8em;
     }
 }
+
+/* Donation section */
+.donation-section {
+    margin-top: 30px;
+    padding-top: 30px;
+    border-top: 2px solid #e9ecef;
+    text-align: center;
+}
+
+.donation-section p {
+    color: #666;
+    margin-bottom: 15px;
+    font-size: 0.95em;
+}
+
+.donation-button {
+    background: linear-gradient(135deg, #7209b7 0%, #560bad 100%);
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    font-size: 15px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.donation-button:hover {
+    background: linear-gradient(135deg, #560bad 0%, #480ca8 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(114, 9, 183, 0.4);
+}
+
+.donation-button.copied {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+.donation-icon {
+    font-size: 18px;
+}
+
+.donation-text {
+    font-weight: 600;
+}
+
+/* Confetti canvas */
+#confettiCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+}
+
+/* Mobile adjustments for donation section */
+@media (max-width: 480px) {
+    .donation-section {
+        margin-top: 20px;
+        padding-top: 20px;
+    }
+    
+    .donation-button {
+        width: 100%;
+        justify-content: center;
+    }
+}
