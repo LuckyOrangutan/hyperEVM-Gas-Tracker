@@ -113,6 +113,59 @@ document.getElementById('addressInput').addEventListener('keypress', function(e)
     }
 });
 
+// Gas Prices Functionality
+async function fetchGasPrices() {
+    const refreshIndicator = document.getElementById('refreshIndicator');
+    refreshIndicator.classList.add('active');
+    
+    try {
+        const response = await fetch('/api/gas-prices');
+        if (!response.ok) {
+            throw new Error('Failed to fetch gas prices');
+        }
+        
+        const data = await response.json();
+        console.log('Gas prices data:', data);
+        
+        // Update Gwei values
+        document.getElementById('lowGwei').textContent = data.prices.low.gwei;
+        document.getElementById('avgGwei').textContent = data.prices.average.gwei;
+        document.getElementById('highGwei').textContent = data.prices.high.gwei;
+        
+        // Update USD values
+        document.getElementById('lowUsd').textContent = `$${data.prices.low.usd}`;
+        document.getElementById('avgUsd').textContent = `$${data.prices.average.usd}`;
+        document.getElementById('highUsd').textContent = `$${data.prices.high.usd}`;
+        
+        // Update last update time
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('en-US', { 
+            hour: 'numeric', 
+            minute: '2-digit',
+            second: '2-digit'
+        });
+        document.getElementById('lastUpdate').textContent = `Last update: ${timeString}`;
+        
+    } catch (error) {
+        console.error('Error fetching gas prices:', error);
+        // Show error state
+        document.getElementById('lowGwei').textContent = '--';
+        document.getElementById('avgGwei').textContent = '--';
+        document.getElementById('highGwei').textContent = '--';
+        document.getElementById('lowUsd').textContent = '$--';
+        document.getElementById('avgUsd').textContent = '$--';
+        document.getElementById('highUsd').textContent = '$--';
+    } finally {
+        refreshIndicator.classList.remove('active');
+    }
+}
+
+// Fetch gas prices on page load
+fetchGasPrices();
+
+// Auto-refresh gas prices every 10 seconds
+setInterval(fetchGasPrices, 10000);
+
 // Donation functionality
 const DONATION_ADDRESS = '0xb0bc544cCE3cF5e869D1733EeCB3E8c01abBb47F';
 

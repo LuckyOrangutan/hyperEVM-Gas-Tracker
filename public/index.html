@@ -9,6 +9,42 @@
 <body>
     <div class="container">
         <h1>HyperEVM Gas Tracker</h1>
+        
+        <!-- Live Gas Prices Section -->
+        <div class="gas-prices-section">
+            <h3>⛽ Current Gas Prices</h3>
+            <div class="gas-prices-grid">
+                <div class="gas-price-card low">
+                    <div class="gas-price-label">🟢 Low</div>
+                    <div class="gas-price-value">
+                        <span id="lowGwei" class="gwei-value">--</span>
+                        <span class="gwei-unit">Gwei</span>
+                    </div>
+                    <div class="gas-price-usd" id="lowUsd">$--</div>
+                </div>
+                <div class="gas-price-card average">
+                    <div class="gas-price-label">🟡 Average</div>
+                    <div class="gas-price-value">
+                        <span id="avgGwei" class="gwei-value">--</span>
+                        <span class="gwei-unit">Gwei</span>
+                    </div>
+                    <div class="gas-price-usd" id="avgUsd">$--</div>
+                </div>
+                <div class="gas-price-card high">
+                    <div class="gas-price-label">🔴 High</div>
+                    <div class="gas-price-value">
+                        <span id="highGwei" class="gwei-value">--</span>
+                        <span class="gwei-unit">Gwei</span>
+                    </div>
+                    <div class="gas-price-usd" id="highUsd">$--</div>
+                </div>
+            </div>
+            <div class="gas-price-update">
+                <span id="lastUpdate">Last update: --</span>
+                <span class="refresh-indicator" id="refreshIndicator">🔄</span>
+            </div>
+        </div>
+        
         <p>Get your complete lifetime HYPE gas usage across all HyperEVM transactions</p>
         
         <div class="input-section">

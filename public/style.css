@@ -38,6 +38,147 @@ p {
     font-size: 1.1em;
 }
 
+/* Gas Prices Section */
+.gas-prices-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.gas-prices-section h3 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 20px;
+    font-size: 1.3em;
+}
+
+.gas-prices-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.gas-price-card {
+    background: white;
+    border-radius: 10px;
+    padding: 15px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease;
+}
+
+.gas-price-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.gas-price-card.low {
+    border-top: 3px solid #4caf50;
+}
+
+.gas-price-card.average {
+    border-top: 3px solid #ff9800;
+}
+
+.gas-price-card.high {
+    border-top: 3px solid #f44336;
+}
+
+.gas-price-label {
+    font-size: 0.9em;
+    color: #666;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.gas-price-value {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 4px;
+    margin-bottom: 5px;
+}
+
+.gwei-value {
+    font-size: 1.8em;
+    font-weight: bold;
+    color: #333;
+}
+
+.gwei-unit {
+    font-size: 0.9em;
+    color: #666;
+    font-weight: normal;
+}
+
+.gas-price-usd {
+    font-size: 0.85em;
+    color: #888;
+    font-weight: 500;
+}
+
+.gas-price-update {
+    text-align: center;
+    font-size: 0.85em;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.refresh-indicator {
+    display: inline-block;
+    animation: spin 2s linear infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.refresh-indicator.active {
+    opacity: 1;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* Mobile adjustments for gas prices */
+@media (max-width: 480px) {
+    .gas-prices-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    
+    .gas-price-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 15px;
+    }
+    
+    .gas-price-label {
+        margin-bottom: 0;
+        flex: 1;
+        text-align: left;
+    }
+    
+    .gas-price-value {
+        margin-bottom: 0;
+    }
+    
+    .gwei-value {
+        font-size: 1.4em;
+    }
+    
+    .gas-price-usd {
+        margin-left: 10px;
+    }
+}
+
 .input-section {
     display: flex;
     flex-direction: column;
