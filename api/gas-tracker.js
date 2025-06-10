@@ -147,8 +147,22 @@ async function scanAllTransactions(address) {
                 throw new Error(`Unable to fetch page ${page} from Hyperscan API: ${error.message}`);
             }
             
-            // Handle different possible response formats
-            const transactions = data.items || data.result || data.txs || data.transactions || data.data || [];
+            // Validate API response format
+            if (!data || typeof data !== 'object') {
+                throw new Error(`Invalid API response format on page ${page}`);
+            }
+            
+            // Handle Hyperscan API response format - should be in data.result
+            let transactions = [];
+            if (data.result && Array.isArray(data.result)) {
+                transactions = data.result;
+            } else if (data.status === '1' && !data.result) {
+                // No transactions found
+                transactions = [];
+            } else {
+                console.error(`Unexpected API response format on page ${page}:`, data);
+                throw new Error(`Unexpected API response format on page ${page}. Expected 'result' array.`);
+            }
             
             if (!Array.isArray(transactions) || transactions.length === 0) {
                 console.log('No more transactions found');
@@ -157,6 +171,12 @@ async function scanAllTransactions(address) {
             
             // Process transactions
             for (const tx of transactions) {
+                // Validate transaction data
+                if (!tx || !tx.hash) {
+                    console.log('Skipping invalid transaction (missing hash)');
+                    continue;
+                }
+                
                 // Skip if we've already processed this transaction
                 if (processedTxs.has(tx.hash)) {
                     console.log(`TX ${tx.hash}: Already processed, skipping duplicate`);
@@ -171,16 +191,32 @@ async function scanAllTransactions(address) {
                     continue;
                 }
                 
+                // Validate gas data exists
+                if (!tx.gasUsed || !tx.gasPrice) {
+                    console.log(`TX ${tx.hash}: Missing gasUsed (${tx.gasUsed}) or gasPrice (${tx.gasPrice}), skipping`);
+                    continue;
+                }
+                
                 // Calculate HYPE fee from Hyperscan's gasUsed and gasPrice
                 let feeHype = 0;
                 
-                if (tx.gasUsed && tx.gasPrice) {
+                try {
+                    // Ensure we have valid numeric values
+                    const gasUsed = typeof tx.gasUsed === 'string' ? BigInt(tx.gasUsed) : BigInt(tx.gasUsed.toString());
+                    const gasPrice = typeof tx.gasPrice === 'string' ? BigInt(tx.gasPrice) : BigInt(tx.gasPrice.toString());
+                    
                     // Calculate fee in Wei, then convert to HYPE
-                    const feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                    const feeInWei = gasUsed * gasPrice;
                     feeHype = Number(feeInWei) / Math.pow(10, 18);
-                } else {
-                    // Skip transaction if missing gas data
-                    console.log(`TX ${tx.hash}: Missing gasUsed or gasPrice, skipping`);
+                    
+                    // Sanity check - gas fee should be positive
+                    if (feeHype <= 0) {
+                        console.log(`TX ${tx.hash}: Invalid fee calculation (${feeHype}), skipping`);
+                        continue;
+                    }
+                    
+                } catch (error) {
+                    console.error(`TX ${tx.hash}: Error calculating fee - gasUsed: ${tx.gasUsed}, gasPrice: ${tx.gasPrice}, error: ${error.message}`);
                     continue;
                 }
                 
@@ -189,13 +225,18 @@ async function scanAllTransactions(address) {
                 totalGasFeesHype += feeHype;
                 
                 // Track gas units used (separate from fees)
-                if (tx.gasUsed) {
-                    totalGasUnitsUsed += Number(tx.gasUsed);
+                try {
+                    const gasUsedNum = Number(tx.gasUsed);
+                    if (gasUsedNum > 0) {
+                        totalGasUnitsUsed += gasUsedNum;
+                    }
+                } catch (error) {
+                    console.error(`TX ${tx.hash}: Error processing gasUsed: ${error.message}`);
                 }
                 
                 transactionCount++;
                 
-                console.log(`TX ${tx.hash}: Added ${feeHype.toFixed(6)} HYPE (${tx.gasUsed} gas × ${tx.gasPrice} Wei)`);
+                console.log(`TX ${tx.hash}: Added ${feeHype.toFixed(8)} HYPE (${tx.gasUsed} gas × ${tx.gasPrice} Wei)`);
             }
             
             // Check if we've fetched all transactions
@@ -207,18 +248,29 @@ async function scanAllTransactions(address) {
             await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
         }
         
-        console.log(`Total gas fees: ${totalGasFeesHype} HYPE, Total gas units: ${totalGasUnitsUsed.toLocaleString()} from ${transactionCount} transactions`);
+        console.log(`=== SCAN COMPLETE ===`);
+        console.log(`Total gas fees: ${totalGasFeesHype.toFixed(8)} HYPE`);
+        console.log(`Total gas units: ${totalGasUnitsUsed.toLocaleString()}`);
+        console.log(`Transaction count: ${transactionCount}`);
+        console.log(`Unique transactions processed: ${processedTxs.size}`);
+        console.log(`===================`);
+        
+        // Ensure precision in calculations
+        const finalGasFeesHype = Math.round(totalGasFeesHype * Math.pow(10, 8)) / Math.pow(10, 8); // Round to 8 decimal places
         
         return {
-            totalGas: totalGasFeesHype.toFixed(6),
-            totalGasDisplay: `${totalGasFeesHype.toFixed(6)} HYPE`,
+            totalGas: finalGasFeesHype.toFixed(8), // Increased precision to 8 decimal places
+            totalGasDisplay: `${finalGasFeesHype.toFixed(8)} HYPE`,
             transactionCount: transactionCount,
-            totalGasWei: (totalGasFeesHype * Math.pow(10, 18)).toString(),
+            uniqueTransactionCount: processedTxs.size,
+            totalGasWei: (finalGasFeesHype * Math.pow(10, 18)).toString(),
             gasUnitsUsed: totalGasUnitsUsed.toLocaleString(),
             totalGasUnits: totalGasUnitsUsed,
-            averageGasPrice: totalGasUnitsUsed > 0 ? ((totalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
-            calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${totalGasFeesHype.toFixed(6)} HYPE fees`,
-            method: 'exact_fee_sum'
+            averageGasPrice: totalGasUnitsUsed > 0 ? ((finalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
+            calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${finalGasFeesHype.toFixed(8)} HYPE fees`,
+            method: 'exact_fee_sum_v2',
+            apiEndpoint: primaryEndpoint,
+            duplicatesSkipped: transactionCount - processedTxs.size
         };
         
     } catch (error) {

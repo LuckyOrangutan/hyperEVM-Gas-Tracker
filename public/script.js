@@ -84,8 +84,10 @@ function isValidAddress(address) {
 }
 
 function displayResults(address, data) {
-    // Main gas amount display
-    document.getElementById('totalGasAmount').textContent = `${data.totalGas} HYPE`;
+    // Main gas amount display with higher precision
+    const gasAmount = parseFloat(data.totalGas);
+    const displayGas = gasAmount >= 0.001 ? gasAmount.toFixed(6) : gasAmount.toFixed(8);
+    document.getElementById('totalGasAmount').textContent = `${displayGas} HYPE`;
     
     // Detail rows
     document.getElementById('resultAddress').textContent = address;
@@ -95,6 +97,19 @@ function displayResults(address, data) {
     
     // Calculation explanation
     document.getElementById('calculation').textContent = data.calculation;
+    
+    // Log detailed info for debugging
+    console.log('=== GAS TRACKING RESULT ===');
+    console.log('Address:', address);
+    console.log('Total Gas:', data.totalGas, 'HYPE');
+    console.log('Transaction Count:', data.transactionCount);
+    console.log('Unique Transactions:', data.uniqueTransactionCount);
+    console.log('Method:', data.method);
+    console.log('API Endpoint:', data.apiEndpoint);
+    if (data.duplicatesSkipped) {
+        console.log('Duplicates Skipped:', data.duplicatesSkipped);
+    }
+    console.log('==========================');
     
     document.getElementById('results').classList.remove('hidden');
 }
