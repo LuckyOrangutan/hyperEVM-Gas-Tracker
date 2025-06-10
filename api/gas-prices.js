@@ -25,17 +25,30 @@ export default async function handler(req, res) {
         const gasPrice = await web3.eth.getGasPrice();
         const gasPriceGwei = Number(web3.utils.fromWei(String(gasPrice), 'gwei'));
         
-        // Get latest block to analyze gas prices
-        const latestBlock = await web3.eth.getBlock('latest', true);
-        const transactions = latestBlock.transactions || [];
-        
+        // Get latest blocks to analyze gas prices (look at last 10 blocks for better sample)
+        const latestBlockNumber = await web3.eth.getBlockNumber();
         let gasPrices = [];
         
-        // Analyze recent transactions for gas price distribution
-        for (const tx of transactions) {
-            if (tx.gasPrice) {
-                const priceInGwei = Number(web3.utils.fromWei(String(tx.gasPrice), 'gwei'));
-                gasPrices.push(priceInGwei);
+        // Analyze last 10 blocks to get more transaction samples
+        const blocksToAnalyze = 10;
+        const blockPromises = [];
+        
+        for (let i = 0; i < blocksToAnalyze; i++) {
+            const blockNumber = latestBlockNumber - BigInt(i);
+            blockPromises.push(web3.eth.getBlock(blockNumber, true));
+        }
+        
+        const blocks = await Promise.all(blockPromises);
+        
+        // Collect gas prices from all blocks
+        for (const block of blocks) {
+            if (block && block.transactions) {
+                for (const tx of block.transactions) {
+                    if (tx.gasPrice) {
+                        const priceInGwei = Number(web3.utils.fromWei(String(tx.gasPrice), 'gwei'));
+                        gasPrices.push(priceInGwei);
+                    }
+                }
             }
         }
         
@@ -46,12 +59,24 @@ export default async function handler(req, res) {
         
         if (gasPrices.length > 0) {
             // Calculate percentiles
-            low = gasPrices[Math.floor(gasPrices.length * 0.1)] || gasPrices[0];
-            average = gasPrices[Math.floor(gasPrices.length * 0.5)] || gasPriceGwei;
-            high = gasPrices[Math.floor(gasPrices.length * 0.9)] || gasPrices[gasPrices.length - 1];
+            const p10 = Math.floor(gasPrices.length * 0.1);
+            const p50 = Math.floor(gasPrices.length * 0.5);
+            const p90 = Math.floor(gasPrices.length * 0.9);
+            
+            low = gasPrices[p10] || gasPrices[0];
+            average = gasPrices[p50] || gasPriceGwei;
+            high = gasPrices[p90] || gasPrices[gasPrices.length - 1];
+            
+            // Ensure minimum variation if all prices are too similar
+            const minDiff = 0.01; // Minimum 0.01 Gwei difference
+            if (high - low < minDiff * 2) {
+                // If prices are too similar, create artificial spread based on average
+                low = Math.max(0.01, average - minDiff);
+                high = average + minDiff;
+            }
         } else {
             // Fallback to standard gas price with variations
-            low = gasPriceGwei * 0.8;
+            low = Math.max(0.01, gasPriceGwei * 0.8);
             average = gasPriceGwei;
             high = gasPriceGwei * 1.5;
         }
@@ -68,7 +93,7 @@ export default async function handler(req, res) {
         
         const response = {
             timestamp: new Date().toISOString(),
-            blockNumber: Number(latestBlock.number),
+            blockNumber: Number(latestBlockNumber),
             baseFee: gasPriceGwei,
             prices: {
                 low: {
