@@ -177,35 +177,19 @@ async function scanAllTransactions(address) {
                 // Check various possible field names for the sender
                 const from = tx.from || tx.from_address || tx.sender;
                 
-                // Use only direct HYPE fee from Hyperscan for maximum accuracy
+                // Calculate HYPE fee from Hyperscan's gasUsed and gasPrice
                 let feeHype = 0;
                 
-                if (tx.fee_hype) {
-                    // Direct HYPE fee field from Hyperscan
-                    feeHype = Number(tx.fee_hype);
-                    console.log(`TX ${tx.hash}: Using direct fee_hype=${feeHype} HYPE`);
-                } else if (tx.feeHype) {
-                    // Alternative naming
-                    feeHype = Number(tx.feeHype);
-                    console.log(`TX ${tx.hash}: Using direct feeHype=${feeHype} HYPE`);
+                if (tx.gasUsed && tx.gasPrice) {
+                    // Calculate fee in Wei, then convert to HYPE
+                    const feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                    feeHype = Number(feeInWei) / Math.pow(10, 18);
+                    console.log(`TX ${tx.hash}: Calculated fee=${feeHype} HYPE (${tx.gasUsed} gas × ${tx.gasPrice} Wei)`);
                 } else {
-                    // Skip transaction if no direct HYPE fee available
-                    console.log(`TX ${tx.hash}: No direct HYPE fee field found, skipping`);
+                    // Skip transaction if missing gas data
+                    console.log(`TX ${tx.hash}: Missing gasUsed or gasPrice, skipping`);
                     continue;
                 }
-                
-                // Commented out fallback calculations to ensure accuracy
-                // } else if (tx.fee) {
-                //     // Fee in Wei, convert to HYPE
-                //     const feeInWei = BigInt(tx.fee);
-                //     feeHype = Number(feeInWei) / Math.pow(10, 18);
-                //     console.log(`TX ${tx.hash}: Converting fee Wei to HYPE=${feeHype}`);
-                // } else if (tx.gasUsed && tx.gasPrice) {
-                //     // Fallback: Calculate from gasUsed * gasPrice
-                //     const feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
-                //     feeHype = Number(feeInWei) / Math.pow(10, 18);
-                //     console.log(`TX ${tx.hash}: Calculated fee=${feeHype} HYPE from gas`);
-                // }
                 
                 if (from && from.toLowerCase() === address.toLowerCase() && feeHype > 0) {
                     totalGasFeesHype += feeHype;
