@@ -1,28 +1,40 @@
 # HyperEVM Gas Tracker - Consolidated Change Log
 
-## [Date: 2025-01-10] - Improve Gas Price Accuracy and UI Updates
+## [Date: 2025-01-10] - Add Gas Units Tracking and RPC Fallback
 
 ### Changes Made:
+- **Gas Units Tracking:**
+  - Added tracking of total gas units used (separate from gas fees)
+  - Now displays both gas units (like Hyperscan's "Gas used" field) and gas fees in HYPE
+  - Added average gas price calculation based on actual usage
+  - Enhanced UI to show gas units used and average gas price per transaction
+
+- **RPC Fallback System:**
+  - Added RPC-based transaction scanning as fallback when Hyperscan API is unavailable
+  - Scans recent blocks directly via HyperEVM RPC for transaction history
+  - Dual-method approach: Hyperscan API first, then RPC scanning
+
 - **Gas Price Tracker Improvements:**
   - Fixed gas prices showing identical values by analyzing last 10 blocks instead of just 1
   - Improved percentile calculations for low/average/high gas prices
   - Added minimum variation logic to ensure meaningful price differences
-  - Better sample size for more accurate gas price distribution
 
 - **UI Text Updates and Donation Address Change:**
   - Updated donation wallet address to 0xB7b18dCEe32677F673620fa115BC572De3ddB591
-  - Changed tagline from "Get your complete lifetime HYPE gas usage across all HyperEVM transactions" to "Find your total hype gas usage"
-  - Changed loading message from "Fetching lifetime gas total (ultra-fast method)..." to "Searching transactions..."
+  - Changed tagline to "Find your total hype gas usage"
+  - Changed loading message to "Searching transactions..."
 
 ### Technical Details:
-- Gas prices API now fetches last 10 blocks concurrently for better transaction sample
-- Implemented minimum 0.01 Gwei difference between price tiers when natural variation is too low
-- Improved BigInt handling for block numbers in multi-block analysis
+- Gas tracker now provides both metrics: total gas units used (comparable to Hyperscan) and total fees paid
+- RPC scanning analyzes last 10,000 blocks in chunks with rate limiting
+- Improved error handling with fallback systems for better reliability
+- Enhanced response format with gasUnitsUsed, totalGasUnits, and averageGasPrice fields
 
 ### Files Modified:
+- api/gas-tracker.js (added gas units tracking and RPC fallback)
 - api/gas-prices.js (multi-block analysis and better percentile calculations)
-- public/script.js (donation address and loading message)
-- public/index.html (tagline text)
+- public/script.js (donation address, loading message, and new field display)
+- public/index.html (tagline text and new result fields)
 
 ---
 

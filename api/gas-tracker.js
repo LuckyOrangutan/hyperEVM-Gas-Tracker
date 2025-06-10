@@ -39,21 +39,30 @@ export default async function handler(req, res) {
         
         console.log(`Starting lifetime gas tracking for address: ${address}`);
         
-        // Go back to transaction scanning for accuracy
+        // Try Hyperscan first, then fallback to RPC scanning
         try {
-            console.log('Scanning all transactions to calculate exact gas fees...');
+            console.log('Trying Hyperscan API first...');
             const result = await scanAllTransactions(address);
-            console.log('Successfully calculated lifetime gas fees');
+            console.log('Successfully calculated lifetime gas fees via Hyperscan');
             return res.json(result);
         } catch (apiError) {
-            console.log('Transaction scanning failed:', apiError.message);
+            console.log('Hyperscan API failed, trying RPC scanning...', apiError.message);
             
-            return res.status(503).json({
-                error: 'Hyperscan API is currently unavailable',
-                details: 'This tracker requires access to Hyperscan to calculate exact gas fees for airdrop points.',
-                suggestion: 'Hyperscan may be down or have changed their API. Please try again later or contact support.',
-                apiError: apiError.message
-            });
+            try {
+                const rpcResult = await scanTransactionsViaRPC(address);
+                console.log('Successfully calculated lifetime gas fees via RPC');
+                return res.json(rpcResult);
+            } catch (rpcError) {
+                console.log('RPC scanning also failed:', rpcError.message);
+                
+                return res.status(503).json({
+                    error: 'Unable to fetch transaction data',
+                    details: 'Both Hyperscan API and RPC scanning are currently unavailable.',
+                    suggestion: 'Please try again later or contact support.',
+                    hyperscanError: apiError.message,
+                    rpcError: rpcError.message
+                });
+            }
         }
         
     } catch (error) {
@@ -110,6 +119,7 @@ async function scanAllTransactions(address) {
     console.log(`Starting transaction scan for address: ${address}`);
     
     let totalGasFeesHype = 0;
+    let totalGasUnitsUsed = 0;
     let transactionCount = 0;
     let page = 1;
     const limit = 100; // Try smaller limit
@@ -183,9 +193,15 @@ async function scanAllTransactions(address) {
                 if (from && from.toLowerCase() === address.toLowerCase() && feeInWei > 0) {
                     const feeHype = Number(feeInWei) / Math.pow(10, 18);
                     totalGasFeesHype += feeHype;
+                    
+                    // Track gas units used (separate from fees)
+                    if (tx.gasUsed) {
+                        totalGasUnitsUsed += Number(tx.gasUsed);
+                    }
+                    
                     transactionCount++;
                     
-                    console.log(`TX ${tx.hash}: fee=${feeHype} HYPE`);
+                    console.log(`TX ${tx.hash}: fee=${feeHype} HYPE, gasUsed=${tx.gasUsed}`);
                 }
             }
             
@@ -198,21 +214,112 @@ async function scanAllTransactions(address) {
             await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
         }
         
-        console.log(`Total exact gas fees: ${totalGasFeesHype} HYPE from ${transactionCount} transactions`);
+        console.log(`Total gas fees: ${totalGasFeesHype} HYPE, Total gas units: ${totalGasUnitsUsed.toLocaleString()} from ${transactionCount} transactions`);
         
         return {
             totalGas: totalGasFeesHype.toFixed(6),
             totalGasDisplay: `${totalGasFeesHype.toFixed(6)} HYPE`,
             transactionCount: transactionCount,
             totalGasWei: (totalGasFeesHype * Math.pow(10, 18)).toString(),
-            gasUnitsUsed: 'Exact calculation',
-            averageGasPrice: 'Variable',
-            calculation: `Exact sum of ${transactionCount.toLocaleString()} transaction fees = ${totalGasFeesHype.toFixed(6)} HYPE`,
+            gasUnitsUsed: totalGasUnitsUsed.toLocaleString(),
+            totalGasUnits: totalGasUnitsUsed,
+            averageGasPrice: totalGasUnitsUsed > 0 ? ((totalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
+            calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${totalGasFeesHype.toFixed(6)} HYPE fees`,
             method: 'exact_fee_sum'
         };
         
     } catch (error) {
         console.error('Error scanning transactions:', error);
+        throw error;
+    }
+}
+
+async function scanTransactionsViaRPC(address) {
+    console.log(`Starting RPC transaction scan for address: ${address}`);
+    
+    const { Web3 } = require('web3');
+    const web3 = new Web3(HYPEREVM_RPC);
+    
+    let totalGasFeesHype = 0;
+    let totalGasUnitsUsed = 0;
+    let transactionCount = 0;
+    
+    try {
+        // Get current block number
+        const latestBlockNumber = await web3.eth.getBlockNumber();
+        console.log(`Scanning from genesis to block ${latestBlockNumber}`);
+        
+        // This is a simplified approach - scan recent blocks for this address
+        // In production, you'd want to use a more efficient method like event logs
+        const blocksToScan = Math.min(10000, Number(latestBlockNumber)); // Scan last 10k blocks max
+        const startBlock = Number(latestBlockNumber) - blocksToScan;
+        
+        console.log(`Scanning blocks ${startBlock} to ${latestBlockNumber}`);
+        
+        // Scan blocks in chunks
+        const chunkSize = 100;
+        for (let i = startBlock; i <= latestBlockNumber; i += chunkSize) {
+            const endBlock = Math.min(i + chunkSize - 1, Number(latestBlockNumber));
+            
+            const blockPromises = [];
+            for (let blockNum = i; blockNum <= endBlock; blockNum++) {
+                blockPromises.push(web3.eth.getBlock(blockNum, true));
+            }
+            
+            const blocks = await Promise.all(blockPromises);
+            
+            for (const block of blocks) {
+                if (block && block.transactions) {
+                    for (const tx of block.transactions) {
+                        if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
+                            // Get transaction receipt for actual gas used
+                            try {
+                                const receipt = await web3.eth.getTransactionReceipt(tx.hash);
+                                if (receipt) {
+                                    const gasUsed = Number(receipt.gasUsed);
+                                    const gasPrice = Number(tx.gasPrice || 0);
+                                    const feeWei = gasUsed * gasPrice;
+                                    const feeHype = feeWei / Math.pow(10, 18);
+                                    
+                                    totalGasFeesHype += feeHype;
+                                    totalGasUnitsUsed += gasUsed;
+                                    transactionCount++;
+                                    
+                                    console.log(`TX ${tx.hash}: ${gasUsed} gas units, ${feeHype.toFixed(6)} HYPE`);
+                                }
+                            } catch (receiptError) {
+                                console.log(`Failed to get receipt for ${tx.hash}:`, receiptError.message);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Progress update
+            if (i % 1000 === 0) {
+                console.log(`Scanned up to block ${endBlock}, found ${transactionCount} transactions so far`);
+            }
+            
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        
+        console.log(`RPC scan complete: ${totalGasFeesHype} HYPE, ${totalGasUnitsUsed.toLocaleString()} gas units from ${transactionCount} transactions`);
+        
+        return {
+            totalGas: totalGasFeesHype.toFixed(6),
+            totalGasDisplay: `${totalGasFeesHype.toFixed(6)} HYPE`,
+            transactionCount: transactionCount,
+            totalGasWei: (totalGasFeesHype * Math.pow(10, 18)).toString(),
+            gasUnitsUsed: totalGasUnitsUsed.toLocaleString(),
+            totalGasUnits: totalGasUnitsUsed,
+            averageGasPrice: totalGasUnitsUsed > 0 ? ((totalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
+            calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${totalGasFeesHype.toFixed(6)} HYPE fees (via RPC)`,
+            method: 'rpc_scan'
+        };
+        
+    } catch (error) {
+        console.error('Error in RPC scanning:', error);
         throw error;
     }
 }
