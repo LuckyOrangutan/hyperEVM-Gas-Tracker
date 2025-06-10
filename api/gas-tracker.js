@@ -144,6 +144,14 @@ async function scanAllTransactions(address) {
                     if (response.ok) {
                         data = await response.json();
                         console.log('Response structure:', Object.keys(data));
+                        
+                        // Log sample transaction structure for debugging
+                        const sampleTxs = data.items || data.result || data.txs || data.transactions || data.data || [];
+                        if (sampleTxs.length > 0) {
+                            console.log('Sample transaction fields:', Object.keys(sampleTxs[0]));
+                            console.log('Sample transaction data:', JSON.stringify(sampleTxs[0], null, 2));
+                        }
+                        
                         success = true;
                         break;
                     }
@@ -169,20 +177,37 @@ async function scanAllTransactions(address) {
                 // Check various possible field names for the sender
                 const from = tx.from || tx.from_address || tx.sender;
                 
-                // Calculate fee from gasUsed * gasPrice (Blockscout format)
-                let feeInWei = 0;
-                if (tx.gasUsed && tx.gasPrice) {
-                    feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
-                } else if (tx.fee) {
-                    // Direct fee field if available
-                    feeInWei = BigInt(tx.fee);
-                } else if (tx.txreceipt_status === '1' && tx.gasUsed && tx.gasPrice) {
-                    // Blockscout format
-                    feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                // Use only direct HYPE fee from Hyperscan for maximum accuracy
+                let feeHype = 0;
+                
+                if (tx.fee_hype) {
+                    // Direct HYPE fee field from Hyperscan
+                    feeHype = Number(tx.fee_hype);
+                    console.log(`TX ${tx.hash}: Using direct fee_hype=${feeHype} HYPE`);
+                } else if (tx.feeHype) {
+                    // Alternative naming
+                    feeHype = Number(tx.feeHype);
+                    console.log(`TX ${tx.hash}: Using direct feeHype=${feeHype} HYPE`);
+                } else {
+                    // Skip transaction if no direct HYPE fee available
+                    console.log(`TX ${tx.hash}: No direct HYPE fee field found, skipping`);
+                    continue;
                 }
                 
-                if (from && from.toLowerCase() === address.toLowerCase() && feeInWei > 0) {
-                    const feeHype = Number(feeInWei) / Math.pow(10, 18);
+                // Commented out fallback calculations to ensure accuracy
+                // } else if (tx.fee) {
+                //     // Fee in Wei, convert to HYPE
+                //     const feeInWei = BigInt(tx.fee);
+                //     feeHype = Number(feeInWei) / Math.pow(10, 18);
+                //     console.log(`TX ${tx.hash}: Converting fee Wei to HYPE=${feeHype}`);
+                // } else if (tx.gasUsed && tx.gasPrice) {
+                //     // Fallback: Calculate from gasUsed * gasPrice
+                //     const feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
+                //     feeHype = Number(feeInWei) / Math.pow(10, 18);
+                //     console.log(`TX ${tx.hash}: Calculated fee=${feeHype} HYPE from gas`);
+                // }
+                
+                if (from && from.toLowerCase() === address.toLowerCase() && feeHype > 0) {
                     totalGasFeesHype += feeHype;
                     
                     // Track gas units used (separate from fees)
@@ -192,7 +217,7 @@ async function scanAllTransactions(address) {
                     
                     transactionCount++;
                     
-                    console.log(`TX ${tx.hash}: fee=${feeHype} HYPE, gasUsed=${tx.gasUsed}`);
+                    console.log(`TX ${tx.hash}: Added ${feeHype} HYPE to total, gasUsed=${tx.gasUsed}`);
                 }
             }
             
