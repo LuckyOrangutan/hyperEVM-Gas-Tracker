@@ -113,55 +113,38 @@ async function scanAllTransactions(address) {
     let totalGasUnitsUsed = 0;
     let transactionCount = 0;
     let page = 1;
-    const limit = 100; // Try smaller limit
+    const limit = 100;
+    const processedTxs = new Set(); // Track processed transaction hashes to prevent duplicates
     
     try {
-        // Hyperscan uses Blockscout API format
+        // Use consistent primary endpoint for all pages to avoid pagination issues
+        const primaryEndpoint = `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&sort=desc`;
+        
         while (true) {
-            const endpoints = [
-                // Primary endpoint - Blockscout format for Hyperscan
-                `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}&sort=desc`,
-                // Alternative without www
-                `https://hyperscan.com/api?module=account&action=txlist&address=${address}&page=${page}&offset=${limit}&sort=desc`,
-                // Try with different parameters
-                `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&startblock=0&endblock=999999999&page=${page}&offset=${limit}`
-            ];
+            const url = `${primaryEndpoint}&page=${page}&offset=${limit}`;
+            console.log(`Fetching page ${page}: ${url}`);
             
             let response;
             let data;
-            let success = false;
             
-            for (const endpoint of endpoints) {
-                try {
-                    console.log(`Trying: ${endpoint}`);
-                    response = await fetch(endpoint, {
-                        headers: {
-                            'Accept': 'application/json',
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                        }
-                    });
-                    
-                    if (response.ok) {
-                        data = await response.json();
-                        console.log('Response structure:', Object.keys(data));
-                        
-                        // Log sample transaction structure for debugging
-                        const sampleTxs = data.items || data.result || data.txs || data.transactions || data.data || [];
-                        if (sampleTxs.length > 0) {
-                            console.log('Sample transaction fields:', Object.keys(sampleTxs[0]));
-                            console.log('Sample transaction data:', JSON.stringify(sampleTxs[0], null, 2));
-                        }
-                        
-                        success = true;
-                        break;
+            try {
+                response = await fetch(url, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                     }
-                } catch (e) {
-                    console.log(`Failed: ${e.message}`);
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-            }
-            
-            if (!success) {
-                throw new Error('Unable to connect to Hyperscan API. Please check if the service is available.');
+                
+                data = await response.json();
+                console.log(`Page ${page} - Response status: ${data.status}, message: ${data.message}`);
+                
+            } catch (error) {
+                console.error(`Failed to fetch page ${page}:`, error.message);
+                throw new Error(`Unable to fetch page ${page} from Hyperscan API: ${error.message}`);
             }
             
             // Handle different possible response formats
@@ -174,8 +157,19 @@ async function scanAllTransactions(address) {
             
             // Process transactions
             for (const tx of transactions) {
+                // Skip if we've already processed this transaction
+                if (processedTxs.has(tx.hash)) {
+                    console.log(`TX ${tx.hash}: Already processed, skipping duplicate`);
+                    continue;
+                }
+                
                 // Check various possible field names for the sender
                 const from = tx.from || tx.from_address || tx.sender;
+                
+                // Only process transactions from the target address
+                if (!from || from.toLowerCase() !== address.toLowerCase()) {
+                    continue;
+                }
                 
                 // Calculate HYPE fee from Hyperscan's gasUsed and gasPrice
                 let feeHype = 0;
@@ -184,25 +178,24 @@ async function scanAllTransactions(address) {
                     // Calculate fee in Wei, then convert to HYPE
                     const feeInWei = BigInt(tx.gasUsed) * BigInt(tx.gasPrice);
                     feeHype = Number(feeInWei) / Math.pow(10, 18);
-                    console.log(`TX ${tx.hash}: Calculated fee=${feeHype} HYPE (${tx.gasUsed} gas × ${tx.gasPrice} Wei)`);
                 } else {
                     // Skip transaction if missing gas data
                     console.log(`TX ${tx.hash}: Missing gasUsed or gasPrice, skipping`);
                     continue;
                 }
                 
-                if (from && from.toLowerCase() === address.toLowerCase() && feeHype > 0) {
-                    totalGasFeesHype += feeHype;
-                    
-                    // Track gas units used (separate from fees)
-                    if (tx.gasUsed) {
-                        totalGasUnitsUsed += Number(tx.gasUsed);
-                    }
-                    
-                    transactionCount++;
-                    
-                    console.log(`TX ${tx.hash}: Added ${feeHype} HYPE to total, gasUsed=${tx.gasUsed}`);
+                // Add to our totals
+                processedTxs.add(tx.hash);
+                totalGasFeesHype += feeHype;
+                
+                // Track gas units used (separate from fees)
+                if (tx.gasUsed) {
+                    totalGasUnitsUsed += Number(tx.gasUsed);
                 }
+                
+                transactionCount++;
+                
+                console.log(`TX ${tx.hash}: Added ${feeHype.toFixed(6)} HYPE (${tx.gasUsed} gas × ${tx.gasPrice} Wei)`);
             }
             
             // Check if we've fetched all transactions
