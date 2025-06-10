@@ -8,11 +8,17 @@
     "build": "echo 'No build step required'",
     "start": "vercel dev"
   },
-  "keywords": ["hyperevm", "gas", "tracker", "blockchain"],
+  "keywords": [
+    "hyperevm",
+    "gas",
+    "tracker",
+    "blockchain"
+  ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
+    "node-fetch": "^3.3.2",
     "web3": "^4.2.1"
   }
 }

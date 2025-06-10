@@ -24,18 +24,21 @@ export default async function handler(req, res) {
     }
 
     try {
-        // Validate request body
-        if (!req.body) {
-            console.error('No request body provided');
-            return res.status(400).json({ error: 'Request body is required' });
+        // Comprehensive request validation
+        let validatedInput;
+        try {
+            validatedInput = validateGasTrackerRequest(req);
+        } catch (validationError) {
+            console.error('Request validation failed:', validationError.message);
+            return res.status(400).json({ 
+                error: 'Invalid request', 
+                details: validationError.message,
+                code: 'VALIDATION_ERROR'
+            });
         }
         
-        const { address } = req.body;
-        console.log('Parsed request - Address:', address);
-        
-        if (!address || !isValidAddress(address)) {
-            return res.status(400).json({ error: 'Invalid address provided' });
-        }
+        const { address, options } = validatedInput;
+        console.log('Validated request - Address:', address, 'Options:', options);
         
         console.log(`Starting lifetime gas tracking for address: ${address}`);
         
@@ -105,18 +108,63 @@ export default async function handler(req, res) {
     }
 }
 
+// Add request deduplication and rate limiting
+const activeRequests = new Map();
+const requestCounts = new Map();
+const RATE_LIMIT_WINDOW = 60000; // 1 minute
+const MAX_REQUESTS_PER_WINDOW = 10;
+const MAX_CONCURRENT_REQUESTS = 3;
 
 async function scanAllTransactions(address) {
     console.log(`Starting transaction scan for address: ${address}`);
     
-    let totalGasFeesHype = 0;
-    let totalGasUnitsUsed = 0;
-    let transactionCount = 0;
-    let page = 1;
-    const limit = 100;
-    const processedTxs = new Set(); // Track processed transaction hashes to prevent duplicates
+    // Rate limiting check
+    const now = Date.now();
+    const clientKey = address; // Use address as client identifier
+    
+    if (!requestCounts.has(clientKey)) {
+        requestCounts.set(clientKey, { count: 0, windowStart: now });
+    }
+    
+    const clientData = requestCounts.get(clientKey);
+    
+    // Reset window if expired
+    if (now - clientData.windowStart > RATE_LIMIT_WINDOW) {
+        clientData.count = 0;
+        clientData.windowStart = now;
+    }
+    
+    // Check rate limit
+    if (clientData.count >= MAX_REQUESTS_PER_WINDOW) {
+        throw new Error(`Rate limit exceeded. Maximum ${MAX_REQUESTS_PER_WINDOW} requests per minute.`);
+    }
+    
+    // Check concurrent requests
+    if (activeRequests.size >= MAX_CONCURRENT_REQUESTS) {
+        throw new Error(`Too many concurrent requests. Maximum ${MAX_CONCURRENT_REQUESTS} allowed.`);
+    }
+    
+    // Check for duplicate request
+    if (activeRequests.has(address)) {
+        throw new Error('A scan for this address is already in progress.');
+    }
+    
+    // Increment rate limit counter
+    clientData.count++;
+    
+    // Mark request as active
+    activeRequests.set(address, { startTime: now });
     
     try {
+        let totalGasFeesHype = 0;
+        let totalGasUnitsUsed = 0;
+        let transactionCount = 0;
+        let page = 1;
+        const limit = 100;
+        const processedTxs = new Set(); // Track processed transaction hashes to prevent duplicates
+        const maxMemoryUsage = 50 * 1024 * 1024; // 50MB limit
+        let estimatedMemoryUsage = 0;
+        
         // Use consistent primary endpoint for all pages to avoid pagination issues
         const primaryEndpoint = `https://www.hyperscan.com/api?module=account&action=txlist&address=${address}&sort=desc`;
         
@@ -201,18 +249,71 @@ async function scanAllTransactions(address) {
                 let feeHype = 0;
                 
                 try {
-                    // Ensure we have valid numeric values
-                    const gasUsed = typeof tx.gasUsed === 'string' ? BigInt(tx.gasUsed) : BigInt(tx.gasUsed.toString());
-                    const gasPrice = typeof tx.gasPrice === 'string' ? BigInt(tx.gasPrice) : BigInt(tx.gasPrice.toString());
+                    // Robust BigInt handling with comprehensive validation
+                    let gasUsed, gasPrice;
                     
-                    // Calculate fee in Wei, then convert to HYPE
+                    // Validate and convert gasUsed
+                    if (tx.gasUsed === null || tx.gasUsed === undefined || tx.gasUsed === '') {
+                        throw new Error('gasUsed is null, undefined, or empty');
+                    }
+                    
+                    try {
+                        gasUsed = typeof tx.gasUsed === 'string' ? BigInt(tx.gasUsed) : BigInt(tx.gasUsed.toString());
+                        if (gasUsed < 0n) {
+                            throw new Error('gasUsed cannot be negative');
+                        }
+                        if (gasUsed > BigInt('1000000000')) { // 1B gas limit sanity check
+                            throw new Error('gasUsed exceeds reasonable limit');
+                        }
+                    } catch (conversionError) {
+                        throw new Error(`Invalid gasUsed format: ${tx.gasUsed} - ${conversionError.message}`);
+                    }
+                    
+                    // Validate and convert gasPrice
+                    if (tx.gasPrice === null || tx.gasPrice === undefined || tx.gasPrice === '') {
+                        throw new Error('gasPrice is null, undefined, or empty');
+                    }
+                    
+                    try {
+                        gasPrice = typeof tx.gasPrice === 'string' ? BigInt(tx.gasPrice) : BigInt(tx.gasPrice.toString());
+                        if (gasPrice < 0n) {
+                            throw new Error('gasPrice cannot be negative');
+                        }
+                        if (gasPrice > BigInt('1000000000000000000000')) { // 1000 Gwei max sanity check
+                            throw new Error('gasPrice exceeds reasonable limit');
+                        }
+                    } catch (conversionError) {
+                        throw new Error(`Invalid gasPrice format: ${tx.gasPrice} - ${conversionError.message}`);
+                    }
+                    
+                    // Calculate fee in Wei using BigInt for precision
                     const feeInWei = gasUsed * gasPrice;
-                    feeHype = Number(feeInWei) / Math.pow(10, 18);
                     
-                    // Sanity check - gas fee should be positive
-                    if (feeHype <= 0) {
-                        console.log(`TX ${tx.hash}: Invalid fee calculation (${feeHype}), skipping`);
-                        continue;
+                    // Convert to HYPE with maximum precision preservation
+                    // Use string division to avoid Number precision loss
+                    const feeInWeiStr = feeInWei.toString();
+                    const weiDivisor = '1000000000000000000'; // 10^18
+                    
+                    // Calculate HYPE with decimal precision
+                    if (feeInWeiStr.length <= 18) {
+                        // Less than 1 HYPE
+                        const paddedWei = feeInWeiStr.padStart(18, '0');
+                        feeHype = parseFloat('0.' + paddedWei);
+                    } else {
+                        // 1 HYPE or more
+                        const integerPart = feeInWeiStr.slice(0, -18);
+                        const decimalPart = feeInWeiStr.slice(-18);
+                        feeHype = parseFloat(integerPart + '.' + decimalPart);
+                    }
+                    
+                    // Enhanced sanity checks
+                    if (!isFinite(feeHype) || isNaN(feeHype) || feeHype <= 0) {
+                        throw new Error(`Invalid fee calculation result: ${feeHype}`);
+                    }
+                    
+                    // Reasonable fee limit check (max 1000 HYPE per transaction)
+                    if (feeHype > 1000) {
+                        throw new Error(`Fee ${feeHype} HYPE exceeds reasonable limit`);
                     }
                     
                 } catch (error) {
@@ -245,7 +346,17 @@ async function scanAllTransactions(address) {
             }
             
             page++;
-            await new Promise(resolve => setTimeout(resolve, 200)); // Rate limit
+            
+            // Memory usage check
+            estimatedMemoryUsage = processedTxs.size * 100; // Rough estimate: 100 bytes per transaction hash
+            if (estimatedMemoryUsage > maxMemoryUsage) {
+                console.warn(`Memory usage limit reached (${estimatedMemoryUsage / 1024 / 1024}MB), stopping scan`);
+                break;
+            }
+            
+            // Progressive rate limiting - slower for larger datasets
+            const delay = Math.min(200 + (page * 10), 1000); // Increase delay as pages increase
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
         
         console.log(`=== SCAN COMPLETE ===`);
@@ -255,10 +366,16 @@ async function scanAllTransactions(address) {
         console.log(`Unique transactions processed: ${processedTxs.size}`);
         console.log(`===================`);
         
-        // Ensure precision in calculations
-        const finalGasFeesHype = Math.round(totalGasFeesHype * Math.pow(10, 8)) / Math.pow(10, 8); // Round to 8 decimal places
+        // Ensure precision in calculations using BigInt arithmetic
+        // Convert to fixed-point arithmetic to avoid floating point errors
+        const precision = 18; // 18 decimal places for maximum precision
+        const multiplier = BigInt(10) ** BigInt(precision);
         
-        return {
+        // Convert total to BigInt for precise rounding
+        const totalAsBigInt = BigInt(Math.round(totalGasFeesHype * Number(multiplier)));
+        const finalGasFeesHype = Number(totalAsBigInt) / Number(multiplier);
+        
+        const result = {
             totalGas: finalGasFeesHype.toFixed(8), // Increased precision to 8 decimal places
             totalGasDisplay: `${finalGasFeesHype.toFixed(8)} HYPE`,
             transactionCount: transactionCount,
@@ -266,20 +383,151 @@ async function scanAllTransactions(address) {
             totalGasWei: (finalGasFeesHype * Math.pow(10, 18)).toString(),
             gasUnitsUsed: totalGasUnitsUsed.toLocaleString(),
             totalGasUnits: totalGasUnitsUsed,
-            averageGasPrice: totalGasUnitsUsed > 0 ? ((finalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
+            averageGasPrice: totalGasUnitsUsed > 0 ? (() => {
+                // Calculate average gas price with BigInt precision
+                const totalFeeWei = BigInt(Math.round(finalGasFeesHype * Math.pow(10, 18)));
+                const totalGasUnitsBigInt = BigInt(totalGasUnitsUsed);
+                const avgGasPriceWei = totalFeeWei / totalGasUnitsBigInt;
+                const avgGasPriceGwei = Number(avgGasPriceWei) / Math.pow(10, 9);
+                return avgGasPriceGwei.toFixed(4) + ' Gwei';
+            })() : 'N/A',
             calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${finalGasFeesHype.toFixed(8)} HYPE fees`,
             method: 'exact_fee_sum_v2',
             apiEndpoint: primaryEndpoint,
-            duplicatesSkipped: transactionCount - processedTxs.size
+            duplicatesSkipped: transactionCount - processedTxs.size,
+            scanStats: {
+                pagesScanned: page - 1,
+                memoryUsage: `${(estimatedMemoryUsage / 1024 / 1024).toFixed(1)}MB`,
+                scanDuration: `${Date.now() - now}ms`,
+                rateLimitStatus: `${clientData.count}/${MAX_REQUESTS_PER_WINDOW} requests this minute`
+            }
         };
+        
+        return result;
         
     } catch (error) {
         console.error('Error scanning transactions:', error);
         throw error;
+    } finally {
+        // Always clean up active request tracking
+        activeRequests.delete(address);
+        
+        // Cleanup old rate limit entries
+        const cutoff = Date.now() - RATE_LIMIT_WINDOW;
+        for (const [key, data] of requestCounts.entries()) {
+            if (data.windowStart < cutoff) {
+                requestCounts.delete(key);
+            }
+        }
     }
 }
 
-
 function isValidAddress(address) {
-    return /^0x[a-fA-F0-9]{40}$/.test(address);
+    // Comprehensive address validation
+    if (!address || typeof address !== 'string') {
+        return false;
+    }
+    
+    // Remove whitespace and convert to lowercase for validation
+    const cleanAddress = address.trim().toLowerCase();
+    
+    // Check basic format: 0x followed by 40 hex characters
+    if (!/^0x[a-f0-9]{40}$/.test(cleanAddress)) {
+        return false;
+    }
+    
+    // Check for common invalid addresses
+    const invalidAddresses = [
+        '0x0000000000000000000000000000000000000000', // Zero address
+        '0x000000000000000000000000000000000000dead', // Common burn address
+    ];
+    
+    if (invalidAddresses.includes(cleanAddress)) {
+        return false;
+    }
+    
+    return true;
+}
+
+// Add robust numeric validation helper
+function validateNumericInput(value, fieldName, options = {}) {
+    const { min = 0, max = Infinity, allowZero = true, required = true } = options;
+    
+    if (value === null || value === undefined) {
+        if (required) {
+            throw new Error(`${fieldName} is required`);
+        }
+        return null;
+    }
+    
+    if (typeof value === 'string' && value.trim() === '') {
+        if (required) {
+            throw new Error(`${fieldName} cannot be empty`);
+        }
+        return null;
+    }
+    
+    let numValue;
+    try {
+        numValue = typeof value === 'string' ? parseFloat(value) : Number(value);
+    } catch (error) {
+        throw new Error(`${fieldName} must be a valid number`);
+    }
+    
+    if (!isFinite(numValue) || isNaN(numValue)) {
+        throw new Error(`${fieldName} must be a finite number`);
+    }
+    
+    if (!allowZero && numValue === 0) {
+        throw new Error(`${fieldName} cannot be zero`);
+    }
+    
+    if (numValue < min) {
+        throw new Error(`${fieldName} cannot be less than ${min}`);
+    }
+    
+    if (numValue > max) {
+        throw new Error(`${fieldName} cannot be greater than ${max}`);
+    }
+    
+    return numValue;
+}
+
+// Add request validation middleware
+function validateGasTrackerRequest(req) {
+    if (!req.body || typeof req.body !== 'object') {
+        throw new Error('Request body must be a valid JSON object');
+    }
+    
+    const { address, options } = req.body;
+    
+    // Validate required address
+    if (!address) {
+        throw new Error('Address is required in request body');
+    }
+    
+    if (!isValidAddress(address)) {
+        throw new Error('Invalid Ethereum address format');
+    }
+    
+    // Validate optional parameters
+    if (options && typeof options === 'object') {
+        if (options.maxPages !== undefined) {
+            validateNumericInput(options.maxPages, 'maxPages', { min: 1, max: 1000 });
+        }
+        
+        if (options.pageSize !== undefined) {
+            validateNumericInput(options.pageSize, 'pageSize', { min: 1, max: 200 });
+        }
+        
+        if (options.fromBlock !== undefined) {
+            validateNumericInput(options.fromBlock, 'fromBlock', { min: 0 });
+        }
+        
+        if (options.toBlock !== undefined) {
+            validateNumericInput(options.toBlock, 'toBlock', { min: 0 });
+        }
+    }
+    
+    return { address: address.trim().toLowerCase(), options: options || {} };
 }

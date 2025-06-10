@@ -1,3 +1,96 @@
+// Live HYPE Price Management
+let priceUpdateInterval;
+let lastPriceUpdate = 0;
+
+// Initialize price widget on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initializePriceWidget();
+    loadGasPrices(); // Load gas prices on startup
+});
+
+async function initializePriceWidget() {
+    await updateLivePrice();
+    
+    // Update every 10 seconds
+    priceUpdateInterval = setInterval(updateLivePrice, 10000);
+    
+    // Add click handler for manual refresh
+    const priceWidget = document.getElementById('priceWidget');
+    if (priceWidget) {
+        priceWidget.addEventListener('click', function() {
+            updateLivePrice(true); // Force refresh
+        });
+    }
+}
+
+async function updateLivePrice(forceRefresh = false) {
+    const priceValue = document.getElementById('livePrice');
+    const priceStatus = document.getElementById('priceStatus');
+    const priceIndicator = document.getElementById('priceIndicator');
+    
+    if (!priceValue || !priceStatus || !priceIndicator) return;
+    
+    // Show loading state
+    priceIndicator.className = 'price-indicator loading';
+    
+    try {
+        const cacheBuster = forceRefresh ? `?t=${Date.now()}` : '';
+        const response = await fetch(`/api/live-price${cacheBuster}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.hype && data.hype.price) {
+            priceValue.textContent = data.hype.formatted;
+            
+            // Update status
+            const ageText = data.hype.cached ? 
+                (data.hype.age >= 0 ? `${data.hype.age}s ago` : 'cached') : 
+                'live';
+            priceStatus.textContent = `${data.hype.source} • ${ageText}`;
+            
+            // Update indicator
+            priceIndicator.className = 'price-indicator';
+            
+            lastPriceUpdate = Date.now();
+        } else {
+            throw new Error('Invalid price data');
+        }
+        
+    } catch (error) {
+        console.error('Price update failed:', error);
+        priceStatus.textContent = 'update failed';
+        priceIndicator.className = 'price-indicator error';
+        
+        // Fallback to cached price or default
+        if (priceValue.textContent === '$--') {
+            priceValue.textContent = '$30.00';
+            priceStatus.textContent = 'fallback price';
+        }
+    }
+}
+
+// Stop price updates when page is hidden (saves bandwidth)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        if (priceUpdateInterval) {
+            clearInterval(priceUpdateInterval);
+        }
+    } else {
+        // Resume updates when page becomes visible
+        if (!priceUpdateInterval) {
+            priceUpdateInterval = setInterval(updateLivePrice, 10000);
+        }
+        // Update immediately if it's been more than 30 seconds
+        if (Date.now() - lastPriceUpdate > 30000) {
+            updateLivePrice();
+        }
+    }
+});
+
 async function trackGas() {
     const address = document.getElementById('addressInput').value.trim();
     const loadingDiv = document.getElementById('loading');

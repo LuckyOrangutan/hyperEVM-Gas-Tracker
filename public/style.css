@@ -12,6 +12,145 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+}
+
+/* Live HYPE Price Widget */
+.price-widget {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-width: 120px;
+}
+
+.price-widget:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.price-content {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+}
+
+.price-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.price-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: #333;
+    line-height: 1;
+}
+
+.price-status {
+    font-size: 9px;
+    color: #888;
+    line-height: 1;
+}
+
+.price-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    animation: pulse 2s infinite;
+}
+
+.price-indicator.loading {
+    background: #f59e0b;
+    animation: pulse 1s infinite;
+}
+
+.price-indicator.error {
+    background: #ef4444;
+    animation: none;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.5;
+        transform: scale(1.1);
+    }
+}
+
+/* Responsive adjustments for price widget */
+@media (max-width: 768px) {
+    .price-widget {
+        top: 15px;
+        right: 15px;
+        padding: 10px 12px;
+        min-width: 100px;
+    }
+    
+    .price-value {
+        font-size: 16px;
+    }
+    
+    .price-label {
+        font-size: 10px;
+    }
+    
+    .price-status {
+        font-size: 8px;
+    }
+}
+
+@media (max-width: 480px) {
+    .price-widget {
+        top: 10px;
+        right: 10px;
+        padding: 8px 10px;
+        min-width: 90px;
+        gap: 8px;
+    }
+    
+    .price-value {
+        font-size: 14px;
+    }
+    
+    .price-indicator {
+        width: 6px;
+        height: 6px;
+    }
+}
+
+/* Alternative positioning for very small screens */
+@media (max-width: 320px) {
+    .price-widget {
+        position: relative;
+        top: auto;
+        right: auto;
+        margin: 0 auto 20px;
+        width: fit-content;
+    }
+    
+    body {
+        padding-top: 0;
+    }
 }
 
 .container {
