@@ -39,30 +39,21 @@ export default async function handler(req, res) {
         
         console.log(`Starting lifetime gas tracking for address: ${address}`);
         
-        // Try Hyperscan first, then fallback to RPC scanning
+        // Use only Hyperscan API for accurate data
         try {
-            console.log('Trying Hyperscan API first...');
+            console.log('Fetching transaction data from Hyperscan API...');
             const result = await scanAllTransactions(address);
-            console.log('Successfully calculated lifetime gas fees via Hyperscan');
+            console.log('Successfully calculated lifetime gas fees');
             return res.json(result);
         } catch (apiError) {
-            console.log('Hyperscan API failed, trying RPC scanning...', apiError.message);
+            console.log('Hyperscan API failed:', apiError.message);
             
-            try {
-                const rpcResult = await scanTransactionsViaRPC(address);
-                console.log('Successfully calculated lifetime gas fees via RPC');
-                return res.json(rpcResult);
-            } catch (rpcError) {
-                console.log('RPC scanning also failed:', rpcError.message);
-                
-                return res.status(503).json({
-                    error: 'Unable to fetch transaction data',
-                    details: 'Both Hyperscan API and RPC scanning are currently unavailable.',
-                    suggestion: 'Please try again later or contact support.',
-                    hyperscanError: apiError.message,
-                    rpcError: rpcError.message
-                });
-            }
+            return res.status(503).json({
+                error: 'Transaction data service temporarily unavailable',
+                details: 'The Hyperscan API is currently not responding. This ensures you get accurate lifetime gas data.',
+                suggestion: 'Please try again in a few minutes.',
+                retryAfter: 60
+            });
         }
         
     } catch (error) {
@@ -234,95 +225,6 @@ async function scanAllTransactions(address) {
     }
 }
 
-async function scanTransactionsViaRPC(address) {
-    console.log(`Starting RPC transaction scan for address: ${address}`);
-    
-    const { Web3 } = require('web3');
-    const web3 = new Web3(HYPEREVM_RPC);
-    
-    let totalGasFeesHype = 0;
-    let totalGasUnitsUsed = 0;
-    let transactionCount = 0;
-    
-    try {
-        // Get current block number
-        const latestBlockNumber = await web3.eth.getBlockNumber();
-        console.log(`Scanning from genesis to block ${latestBlockNumber}`);
-        
-        // This is a simplified approach - scan recent blocks for this address
-        // In production, you'd want to use a more efficient method like event logs
-        const blocksToScan = Math.min(10000, Number(latestBlockNumber)); // Scan last 10k blocks max
-        const startBlock = Number(latestBlockNumber) - blocksToScan;
-        
-        console.log(`Scanning blocks ${startBlock} to ${latestBlockNumber}`);
-        
-        // Scan blocks in chunks
-        const chunkSize = 100;
-        for (let i = startBlock; i <= latestBlockNumber; i += chunkSize) {
-            const endBlock = Math.min(i + chunkSize - 1, Number(latestBlockNumber));
-            
-            const blockPromises = [];
-            for (let blockNum = i; blockNum <= endBlock; blockNum++) {
-                blockPromises.push(web3.eth.getBlock(blockNum, true));
-            }
-            
-            const blocks = await Promise.all(blockPromises);
-            
-            for (const block of blocks) {
-                if (block && block.transactions) {
-                    for (const tx of block.transactions) {
-                        if (tx.from && tx.from.toLowerCase() === address.toLowerCase()) {
-                            // Get transaction receipt for actual gas used
-                            try {
-                                const receipt = await web3.eth.getTransactionReceipt(tx.hash);
-                                if (receipt) {
-                                    const gasUsed = Number(receipt.gasUsed);
-                                    const gasPrice = Number(tx.gasPrice || 0);
-                                    const feeWei = gasUsed * gasPrice;
-                                    const feeHype = feeWei / Math.pow(10, 18);
-                                    
-                                    totalGasFeesHype += feeHype;
-                                    totalGasUnitsUsed += gasUsed;
-                                    transactionCount++;
-                                    
-                                    console.log(`TX ${tx.hash}: ${gasUsed} gas units, ${feeHype.toFixed(6)} HYPE`);
-                                }
-                            } catch (receiptError) {
-                                console.log(`Failed to get receipt for ${tx.hash}:`, receiptError.message);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Progress update
-            if (i % 1000 === 0) {
-                console.log(`Scanned up to block ${endBlock}, found ${transactionCount} transactions so far`);
-            }
-            
-            // Rate limiting
-            await new Promise(resolve => setTimeout(resolve, 50));
-        }
-        
-        console.log(`RPC scan complete: ${totalGasFeesHype} HYPE, ${totalGasUnitsUsed.toLocaleString()} gas units from ${transactionCount} transactions`);
-        
-        return {
-            totalGas: totalGasFeesHype.toFixed(6),
-            totalGasDisplay: `${totalGasFeesHype.toFixed(6)} HYPE`,
-            transactionCount: transactionCount,
-            totalGasWei: (totalGasFeesHype * Math.pow(10, 18)).toString(),
-            gasUnitsUsed: totalGasUnitsUsed.toLocaleString(),
-            totalGasUnits: totalGasUnitsUsed,
-            averageGasPrice: totalGasUnitsUsed > 0 ? ((totalGasFeesHype * Math.pow(10, 18)) / totalGasUnitsUsed / Math.pow(10, 9)).toFixed(4) + ' Gwei' : 'N/A',
-            calculation: `${transactionCount.toLocaleString()} transactions: ${totalGasUnitsUsed.toLocaleString()} gas units = ${totalGasFeesHype.toFixed(6)} HYPE fees (via RPC)`,
-            method: 'rpc_scan'
-        };
-        
-    } catch (error) {
-        console.error('Error in RPC scanning:', error);
-        throw error;
-    }
-}
 
 function isValidAddress(address) {
     return /^0x[a-fA-F0-9]{40}$/.test(address);
