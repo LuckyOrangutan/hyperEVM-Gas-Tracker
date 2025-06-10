@@ -23,7 +23,7 @@ export default async function handler(req, res) {
         
         // Get current gas price
         const gasPrice = await web3.eth.getGasPrice();
-        const gasPriceGwei = Number(web3.utils.fromWei(gasPrice, 'gwei'));
+        const gasPriceGwei = Number(web3.utils.fromWei(String(gasPrice), 'gwei'));
         
         // Get latest block to analyze gas prices
         const latestBlock = await web3.eth.getBlock('latest', true);
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
         // Analyze recent transactions for gas price distribution
         for (const tx of transactions) {
             if (tx.gasPrice) {
-                const priceInGwei = Number(web3.utils.fromWei(tx.gasPrice, 'gwei'));
+                const priceInGwei = Number(web3.utils.fromWei(String(tx.gasPrice), 'gwei'));
                 gasPrices.push(priceInGwei);
             }
         }
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
         
         const response = {
             timestamp: new Date().toISOString(),
-            blockNumber: latestBlock.number,
+            blockNumber: Number(latestBlock.number),
             baseFee: gasPriceGwei,
             prices: {
                 low: {

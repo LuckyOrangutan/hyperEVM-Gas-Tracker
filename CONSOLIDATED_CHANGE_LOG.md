@@ -1,5 +1,22 @@
 # HyperEVM Gas Tracker - Consolidated Change Log
 
+## [Date: 2025-01-10] - Fix Gwei Tracker BigInt Serialization Error
+
+### Changes Made:
+- Fixed "Do not know how to serialize a BigInt" error in gas-prices.js endpoint
+- Converted BigInt values to strings/numbers before JSON serialization
+- Gwei tracker now properly displays low, average, and high gas prices
+
+### Technical Details:
+- Converted gasPrice BigInt values to strings before passing to web3.utils.fromWei()
+- Converted latestBlock.number BigInt to Number for JSON response
+- Applied String() conversion to tx.gasPrice values in transaction loop
+
+### Files Modified:
+- api/gas-prices.js (fixed BigInt handling)
+
+---
+
 ## [Date: 2025-01-06] - Live Gas Fee Tracking Enhancement
 
 ### Changes Made:
