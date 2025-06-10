@@ -1,5 +1,18 @@
 # HyperEVM Gas Tracker - Consolidated Change Log
 
+## [Date: 2025-01-10] - UI Text Updates and Donation Address Change
+
+### Changes Made:
+- Updated donation wallet address to 0xB7b18dCEe32677F673620fa115BC572De3ddB591
+- Changed tagline from "Get your complete lifetime HYPE gas usage across all HyperEVM transactions" to "Find your total hype gas usage"
+- Changed loading message from "Fetching lifetime gas total (ultra-fast method)..." to "Searching transactions..."
+
+### Files Modified:
+- public/script.js (donation address and loading message)
+- public/index.html (tagline text)
+
+---
+
 ## [Date: 2025-01-10] - Fix Gwei Tracker BigInt Serialization Error
 
 ### Changes Made:

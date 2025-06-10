@@ -28,7 +28,7 @@ async function trackGas() {
 async function performSmartGasTracking(address) {
     const loadingDiv = document.getElementById('loading');
     
-    const loadingMessage = 'Fetching lifetime gas total (ultra-fast method)...';
+    const loadingMessage = 'Searching transactions...';
     loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
     
@@ -167,7 +167,7 @@ fetchGasPrices();
 setInterval(fetchGasPrices, 10000);
 
 // Donation functionality
-const DONATION_ADDRESS = '0xb0bc544cCE3cF5e869D1733EeCB3E8c01abBb47F';
+const DONATION_ADDRESS = '0xB7b18dCEe32677F673620fa115BC572De3ddB591';
 
 async function copyDonationAddress() {
     try {
