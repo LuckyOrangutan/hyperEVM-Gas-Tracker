@@ -285,7 +285,7 @@ function displayResults(address, data) {
     
     // Detail rows
     document.getElementById('resultAddress').textContent = address;
-    document.getElementById('txCount').textContent = formatNumber(data.transactionCount);
+    document.getElementById('totalTxCount').textContent = formatNumber(data.transactionCount);
     document.getElementById('gasUnitsUsed').textContent = data.gasUnitsUsed || 'N/A';
     document.getElementById('avgGasPrice').textContent = data.averageGasPrice || 'N/A';
     
