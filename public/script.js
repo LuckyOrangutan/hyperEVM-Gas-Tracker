@@ -120,10 +120,100 @@ async function trackGas() {
 
 async function performSmartGasTracking(address) {
     const loadingDiv = document.getElementById('loading');
+    const loadingText = document.getElementById('loadingText');
+    const progressFill = document.getElementById('progressFill');
+    const progressPercent = document.getElementById('progressPercent');
+    const txCount = document.getElementById('txCount');
+    const pageCount = document.getElementById('pageCount');
+    const loadingDetails = document.getElementById('loadingDetails');
     
-    const loadingMessage = 'Searching transactions...';
-    loadingDiv.textContent = loadingMessage;
     loadingDiv.classList.remove('hidden');
+    
+    // Reset progress
+    progressFill.style.width = '0%';
+    progressPercent.textContent = '0%';
+    txCount.textContent = '0';
+    pageCount.textContent = '0';
+    
+    // Simulated progress tracking
+    let progress = 0;
+    let txProcessed = 0;
+    let pagesProcessed = 0;
+    
+    const loadingMessages = [
+        'Initializing scanner...',
+        'Connecting to HyperEVM network...',
+        'Fetching transaction history...',
+        'Analyzing gas usage patterns...',
+        'Processing transaction data...',
+        'Calculating total gas spent...',
+        'Almost there...',
+        'Finalizing results...'
+    ];
+    
+    const details = [
+        'Establishing secure connection',
+        'Querying blockchain data',
+        'Scanning transaction blocks',
+        'Parsing gas fee structures',
+        'Aggregating historical data',
+        'Computing lifetime totals',
+        'Verifying calculations',
+        'Preparing final report'
+    ];
+    
+    let messageIndex = 0;
+    let startTime = Date.now();
+    
+    // Progress animation
+    const progressInterval = setInterval(() => {
+        if (progress < 90) {
+            // Smooth progress with varying speeds
+            const increment = Math.random() * 3 + 0.5;
+            progress = Math.min(progress + increment, 90);
+            
+            // Update UI
+            progressFill.style.width = `${progress}%`;
+            progressPercent.textContent = `${Math.floor(progress)}%`;
+            
+            // Simulate transaction counting
+            if (Math.random() > 0.7) {
+                txProcessed += Math.floor(Math.random() * 50) + 10;
+                txCount.textContent = txProcessed.toLocaleString();
+                
+                // Update animated class for count up effect
+                txCount.style.animation = 'none';
+                setTimeout(() => {
+                    txCount.style.animation = 'countUp 0.5s ease-out';
+                }, 10);
+            }
+            
+            // Update pages
+            pagesProcessed = Math.floor(progress / 10);
+            pageCount.textContent = pagesProcessed;
+            
+            // Cycle through messages
+            const elapsed = Date.now() - startTime;
+            const newMessageIndex = Math.min(
+                Math.floor(elapsed / 2000), 
+                loadingMessages.length - 1
+            );
+            
+            if (newMessageIndex !== messageIndex) {
+                messageIndex = newMessageIndex;
+                loadingText.textContent = loadingMessages[messageIndex];
+                loadingDetails.textContent = details[messageIndex];
+                
+                // Add fade effect
+                loadingText.style.animation = 'none';
+                loadingDetails.style.animation = 'none';
+                setTimeout(() => {
+                    loadingText.style.animation = 'pulse 2s ease-in-out infinite';
+                    loadingDetails.style.animation = 'fadeIn 0.5s ease-out';
+                }, 10);
+            }
+        }
+    }, 100);
     
     try {
         const response = await fetch('/api/gas-tracker', {
@@ -133,6 +223,14 @@ async function performSmartGasTracking(address) {
             },
             body: JSON.stringify({ address })
         });
+        
+        // Complete the progress bar
+        clearInterval(progressInterval);
+        progress = 100;
+        progressFill.style.width = '100%';
+        progressPercent.textContent = '100%';
+        loadingText.textContent = 'Complete!';
+        loadingDetails.textContent = 'Processing final results...';
         
         if (!response.ok) {
             let errorData;
@@ -149,8 +247,13 @@ async function performSmartGasTracking(address) {
         
         const data = await response.json();
         console.log('Received data:', data);
+        
+        // Small delay to show completion
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         displayResults(address, data);
     } catch (error) {
+        clearInterval(progressInterval);
         handleError(error);
     } finally {
         loadingDiv.classList.add('hidden');

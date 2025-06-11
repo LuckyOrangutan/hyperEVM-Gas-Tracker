@@ -62,14 +62,31 @@
             <button onclick="trackGas()">Track Lifetime Gas ⚡</button>
         </div>
         
-        <div id="loading" class="loading hidden">Loading...</div>
-        
-        <div id="progress" class="progress hidden">
-            <div class="progress-bar">
-                <div id="progressFill" class="progress-fill"></div>
+        <div id="loading" class="loading hidden">
+            <div class="loading-container">
+                <div class="loading-header">
+                    <div class="loading-spinner"></div>
+                    <span id="loadingText" class="loading-text">Initializing scanner...</span>
+                </div>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <div class="loading-stats">
+                    <div class="stat-item">
+                        <span class="stat-label">Progress:</span>
+                        <span id="progressPercent" class="stat-value">0%</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Transactions:</span>
+                        <span id="txCount" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Pages:</span>
+                        <span id="pageCount" class="stat-value">0</span>
+                    </div>
+                </div>
+                <div id="loadingDetails" class="loading-details"></div>
             </div>
-            <div id="progressText" class="progress-text">0% complete</div>
-            <div id="progressDetails" class="progress-details"></div>
         </div>
         
         <div id="results" class="results hidden">
