@@ -94,14 +94,12 @@ document.addEventListener('visibilitychange', function() {
 async function trackGas() {
     const address = document.getElementById('addressInput').value.trim();
     const loadingDiv = document.getElementById('loading');
-    const progressDiv = document.getElementById('progress');
     const resultsDiv = document.getElementById('results');
     const errorDiv = document.getElementById('error');
     
     // Hide previous results
     resultsDiv.classList.add('hidden');
     errorDiv.classList.add('hidden');
-    progressDiv.classList.add('hidden');
     
     // Validate address
     if (!address) {
